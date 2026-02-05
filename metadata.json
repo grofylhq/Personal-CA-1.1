@@ -1,0 +1,7 @@
+{
+  "name": "Personal CA 1.1",
+  "description": "An advanced AI-powered financial, compliance, and business-intelligence assistant for entrepreneurs and finance teams.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
