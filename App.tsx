@@ -199,6 +199,14 @@ const App: React.FC = () => {
   }, [activeDraft]);
 
   useEffect(() => {
+    authAPI.syncSession().then(user => {
+      if (user) setCurrentUser(user);
+    }).catch(() => {
+      // noop: fallback is persisted local session
+    });
+  }, []);
+
+  useEffect(() => {
     if (currentUser && currentUser.profile.currentSessionId) {
       const session = currentUser.profile.chatSessions.find(s => s.id === currentUser.profile.currentSessionId);
       if (session) {

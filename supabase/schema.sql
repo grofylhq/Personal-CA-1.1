@@ -3,7 +3,6 @@ create extension if not exists pgcrypto;
 create table if not exists public.user_accounts (
   id uuid primary key default gen_random_uuid(),
   email text unique not null,
-  password_hash text not null,
   name text not null,
   profile_json jsonb not null,
   created_at timestamptz not null default now(),
@@ -28,6 +27,10 @@ execute function public.update_timestamp();
 
 alter table public.user_accounts enable row level security;
 
--- NOTE: For client-side anon-key access, add policies in Supabase dashboard.
--- Example (development only, open access):
--- create policy "allow all" on public.user_accounts for all using (true) with check (true);
+-- Recommended policies (authenticated users only):
+-- create policy "read own profile" on public.user_accounts
+--   for select to authenticated using (auth.uid() = id);
+-- create policy "insert own profile" on public.user_accounts
+--   for insert to authenticated with check (auth.uid() = id);
+-- create policy "update own profile" on public.user_accounts
+--   for update to authenticated using (auth.uid() = id) with check (auth.uid() = id);

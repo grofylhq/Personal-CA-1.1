@@ -8,7 +8,6 @@ const SALT = 'pca_v2_core_salt_738491';
 type UserAccountRow = {
   id: string;
   email: string;
-  password_hash: string;
   name: string;
   profile_json: UserProfile;
 };
@@ -75,28 +74,16 @@ const createDefaultProfile = (id: string, email: string, name: string, avatarUrl
 const mapRowToAccount = (row: UserAccountRow): UserAccount => ({
   id: row.id,
   email: row.email,
-  passwordHash: row.password_hash,
+  passwordHash: '',
   name: row.name,
   profile: row.profile_json
 });
-
-async function getSupabaseUserByEmail(email: string): Promise<UserAccountRow | null> {
-  if (!supabase) return null;
-  const { data, error } = await supabase
-    .from('user_accounts')
-    .select('*')
-    .eq('email', email)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data as UserAccountRow | null;
-}
 
 async function getSupabaseUserById(id: string): Promise<UserAccountRow | null> {
   if (!supabase) return null;
   const { data, error } = await supabase
     .from('user_accounts')
-    .select('*')
+    .select('id,email,name,profile_json')
     .eq('id', id)
     .maybeSingle();
 
@@ -106,6 +93,55 @@ async function getSupabaseUserById(id: string): Promise<UserAccountRow | null> {
 
 async function upsertSession(account: UserAccount) {
   localStorage.setItem(DB_KEY_SESSION, JSON.stringify(account));
+}
+
+async function getSupabaseAuthUser() {
+  if (!supabase) return null;
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw error;
+  return data.user;
+}
+
+async function ensureSupabaseAccount(authUser: { id: string; email?: string | null; user_metadata?: Record<string, any> }, fallbackName?: string): Promise<UserAccountRow> {
+  if (!supabase) throw new Error('Supabase unavailable');
+
+  const email = authUser.email?.toLowerCase().trim();
+  if (!email) throw new Error('Authenticated user email is unavailable');
+
+  const metadataName = typeof authUser.user_metadata?.name === 'string'
+    ? authUser.user_metadata.name.trim()
+    : typeof authUser.user_metadata?.full_name === 'string'
+      ? authUser.user_metadata.full_name.trim()
+      : '';
+
+  const resolvedName = metadataName || fallbackName?.trim() || email.split('@')[0];
+  const avatarUrl = typeof authUser.user_metadata?.avatar_url === 'string' ? authUser.user_metadata.avatar_url : '';
+
+  const existing = await getSupabaseUserById(authUser.id);
+  if (existing) return existing;
+
+  const profile = createDefaultProfile(
+    authUser.id,
+    email,
+    resolvedName,
+    avatarUrl,
+    avatarUrl ? 'Strategic Investor' : 'Executive',
+    avatarUrl ? 'Google Linked Account Initialized.' : ''
+  );
+
+  const { data, error } = await supabase
+    .from('user_accounts')
+    .insert({
+      id: authUser.id,
+      email,
+      name: resolvedName,
+      profile_json: profile
+    })
+    .select('id,email,name,profile_json')
+    .single();
+
+  if (error) throw error;
+  return data as UserAccountRow;
 }
 
 const localAuthAPI = {
@@ -191,6 +227,9 @@ const localAuthAPI = {
   },
 
   logout: async () => {
+    if (hasSupabaseConfig && supabase) {
+      await supabase.auth.signOut();
+    }
     localStorage.removeItem(DB_KEY_SESSION);
     await delay(100);
   },
@@ -251,12 +290,12 @@ export const authAPI = {
     if (!hasSupabaseConfig || !supabase) return localAuthAPI.login(email, password);
 
     const cleanEmail = email.toLowerCase().trim();
-    const row = await getSupabaseUserByEmail(cleanEmail);
-    const hashedPassword = await hashPassword(password);
+    const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+    if (error) throw new Error(error.message || 'Invalid Credentials / Identity Node Mismatch');
 
-    if (!row || row.password_hash !== hashedPassword) {
-      throw new Error('Invalid Credentials / Identity Node Mismatch');
-    }
+    if (!data.user) throw new Error('Unable to establish authenticated session');
+
+    const row = await ensureSupabaseAccount(data.user);
 
     const account = deepHydrate(mapRowToAccount(row));
     await upsertSession(account);
@@ -266,78 +305,47 @@ export const authAPI = {
   loginWithGoogle: async (): Promise<UserAccount> => {
     if (!hasSupabaseConfig || !supabase) return localAuthAPI.loginWithGoogle();
 
-    const googleIdentity = {
-      email: 'investor.demo@gmail.com',
-      name: 'Google User',
-      picture: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150&h=150'
-    };
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
 
-    const cleanEmail = googleIdentity.email.toLowerCase();
-    let row = await getSupabaseUserByEmail(cleanEmail);
+    if (error) throw error;
 
-    if (!row) {
-      const id = crypto.randomUUID();
-      const profile = createDefaultProfile(
-        id,
-        cleanEmail,
-        googleIdentity.name,
-        googleIdentity.picture,
-        'Strategic Investor',
-        'Google Linked Account Initialized.'
-      );
-
-      const { data, error } = await supabase
-        .from('user_accounts')
-        .insert({
-          id,
-          email: cleanEmail,
-          password_hash: 'social_linked',
-          name: googleIdentity.name,
-          profile_json: profile
-        })
-        .select('*')
-        .single();
-
-      if (error) throw error;
-      row = data as UserAccountRow;
+    if (data.url) {
+      window.location.assign(data.url);
     }
 
-    const account = deepHydrate(mapRowToAccount(row));
-    await upsertSession(account);
-    return account;
+    return new Promise<UserAccount>(() => {});
   },
 
   register: async (email: string, password: string, name: string): Promise<UserAccount> => {
     if (!hasSupabaseConfig || !supabase) return localAuthAPI.register(email, password, name);
 
     const cleanEmail = email.toLowerCase().trim();
-    const existing = await getSupabaseUserByEmail(cleanEmail);
-    if (existing) throw new Error('Identity already exists in this node');
+    const { data, error } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password,
+      options: {
+        data: { name: name.trim() }
+      }
+    });
 
-    const id = crypto.randomUUID();
-    const profile = createDefaultProfile(id, cleanEmail, name.trim());
-    const passwordHash = await hashPassword(password);
+    if (error) throw new Error(error.message || 'Identity already exists in this node');
+    if (!data.user) throw new Error('Unable to initialize identity');
 
-    const { data, error } = await supabase
-      .from('user_accounts')
-      .insert({
-        id,
-        email: cleanEmail,
-        password_hash: passwordHash,
-        name: name.trim(),
-        profile_json: profile
-      })
-      .select('*')
-      .single();
-
-    if (error) throw error;
-
-    const account = deepHydrate(mapRowToAccount(data as UserAccountRow));
+    const row = await ensureSupabaseAccount(data.user, name.trim());
+    const account = deepHydrate(mapRowToAccount(row));
     await upsertSession(account);
     return account;
   },
 
   logout: async () => {
+    if (hasSupabaseConfig && supabase) {
+      await supabase.auth.signOut();
+    }
     localStorage.removeItem(DB_KEY_SESSION);
     await delay(100);
   },
@@ -356,20 +364,20 @@ export const authAPI = {
 
   syncSession: async (): Promise<UserAccount | null> => {
     if (!hasSupabaseConfig || !supabase) return authAPI.getSession();
-    const current = authAPI.getSession();
-    if (!current) return null;
 
     try {
-      const row = await getSupabaseUserById(current.id);
-      if (!row) {
+      const authUser = await getSupabaseAuthUser();
+      if (!authUser) {
         localStorage.removeItem(DB_KEY_SESSION);
         return null;
       }
+
+      const row = await ensureSupabaseAccount(authUser);
       const account = deepHydrate(mapRowToAccount(row));
       await upsertSession(account);
       return account;
     } catch {
-      return current;
+      return authAPI.getSession();
     }
   }
 };
@@ -377,6 +385,9 @@ export const authAPI = {
 export const userAPI = {
   updateProfile: async (accountId: string, updates: Partial<UserProfile>): Promise<UserAccount> => {
     if (!hasSupabaseConfig || !supabase) return localUserAPI.updateProfile(accountId, updates);
+
+    const authUser = await getSupabaseAuthUser();
+    if (!authUser || authUser.id !== accountId) throw new Error('Unauthorized profile update attempt');
 
     const row = await getSupabaseUserById(accountId);
     if (!row) throw new Error('Data Sync Fault');
@@ -388,11 +399,10 @@ export const userAPI = {
       .from('user_accounts')
       .update({
         name: updatedName,
-        profile_json: updatedProfile,
-        updated_at: new Date().toISOString()
+        profile_json: updatedProfile
       })
       .eq('id', accountId)
-      .select('*')
+      .select('id,email,name,profile_json')
       .single();
 
     if (error) throw error;
