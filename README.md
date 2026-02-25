@@ -15,6 +15,11 @@ View your app in AI Studio: https://ai.studio/apps/drive/1GfJxZyVB24RV7tDCCs2DnA
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. Create `.env.local` and set your OpenRouter key:
+   ```env
+   VITE_OPENROUTER_API_KEY=your_key_here
+   VITE_OPENROUTER_MODEL=google/gemini-2.0-flash-exp:free
+   ```
+   You can copy from `.env.example`.
 3. Run the app:
    `npm run dev`
