@@ -1,5 +1,5 @@
 
-import { ToolConfig, NewsItem } from './types';
+import { ToolConfig, NewsItem, AIModelConfig, AIProvider } from './types';
 
 export const TOOLS: ToolConfig[] = [
   // Tax Tools
@@ -196,3 +196,24 @@ export const GUIDED_PATHS = [
     prompt: 'Help me analyze my business health. Walk me through calculating my unit economics, gross margins, and current runway. What strategic steps should I take to improve my cash efficiency ratio?'
   }
 ];
+
+export const AI_MODELS: AIModelConfig[] = [
+  // Google Gemini
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'gemini', description: 'Fast and efficient with Google Search' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'gemini', description: 'Most capable Gemini model' },
+  // OpenAI
+  { id: 'gpt-4.1', name: 'GPT-4.1', provider: 'openai', description: 'Latest flagship model' },
+  { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', provider: 'openai', description: 'Balanced performance and speed' },
+  { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', provider: 'openai', description: 'Fast and lightweight' },
+  { id: 'o3-mini', name: 'o3 Mini', provider: 'openai', description: 'Advanced reasoning model' },
+  // Anthropic Claude
+  { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', provider: 'anthropic', description: 'Latest Claude model' },
+  { id: 'claude-3-7-sonnet-20250219', name: 'Claude 3.7 Sonnet', provider: 'anthropic', description: 'Enhanced intelligence' },
+  { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', provider: 'anthropic', description: 'Fast and efficient' },
+];
+
+export const DEFAULT_MODELS: Record<AIProvider, string> = {
+  gemini: 'gemini-2.5-flash',
+  openai: 'gpt-4.1',
+  anthropic: 'claude-sonnet-4-20250514',
+};

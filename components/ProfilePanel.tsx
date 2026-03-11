@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { UserProfile, DocumentItem } from '../types';
+import { UserProfile, DocumentItem, AIProvider } from '../types';
+import { AI_MODELS, DEFAULT_MODELS } from '../constants';
 import { 
   X, Wallet, TrendingUp, Shield, Save, 
   Sparkles, Building2, 
@@ -427,6 +428,52 @@ const ProfilePanel: React.FC<Props> = ({ isOpen, onClose, profile, onUpdate, the
                                     <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${theme === 'dark' ? 'translate-x-5' : 'translate-x-0'}`} />
                                  </button>
                               </div>
+                           </div>
+                        </section>
+
+                        <section className="space-y-4">
+                           <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-widest px-2 flex items-center gap-2">
+                             <Cpu size={14}/> AI Model
+                           </h4>
+                           <div className="space-y-3">
+                             {(['gemini', 'openai', 'anthropic'] as AIProvider[]).map(providerKey => {
+                               const providerModels = AI_MODELS.filter(m => m.provider === providerKey);
+                               const providerLabel = providerKey === 'gemini' ? 'Google Gemini' : providerKey === 'openai' ? 'OpenAI' : 'Anthropic Claude';
+                               const selectedModel = profile.preferredModel || DEFAULT_MODELS[profile.preferredAIProvider || 'gemini'];
+                               return (
+                                 <div key={providerKey} className="bg-slate-50 dark:bg-white/[0.02] border border-slate-100 dark:border-white/5 rounded-2xl overflow-hidden">
+                                   <div className="px-4 py-3 border-b border-slate-100 dark:border-white/5">
+                                     <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{providerLabel}</p>
+                                   </div>
+                                   <div className="p-2 space-y-1">
+                                     {providerModels.map(m => {
+                                       const isSelected = selectedModel === m.id;
+                                       return (
+                                         <button
+                                           key={m.id}
+                                           onClick={() => { handleChange('preferredAIProvider', m.provider as string); handleChange('preferredModel', m.id); }}
+                                           className={`w-full flex items-center justify-between p-3 rounded-xl transition-all text-left ${
+                                             isSelected
+                                               ? 'bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-700 ring-1 ring-brand-500/20'
+                                               : 'hover:bg-white dark:hover:bg-white/5 border border-transparent'
+                                           }`}
+                                         >
+                                           <div>
+                                             <p className={`text-sm font-bold ${isSelected ? 'text-brand-700 dark:text-brand-300' : 'text-slate-900 dark:text-white'}`}>{m.name}</p>
+                                             <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{m.description}</p>
+                                           </div>
+                                           {isSelected && (
+                                             <div className="w-5 h-5 rounded-full bg-brand-500 flex items-center justify-center shrink-0">
+                                               <CheckCircle2 size={12} className="text-white" />
+                                             </div>
+                                           )}
+                                         </button>
+                                       );
+                                     })}
+                                   </div>
+                                 </div>
+                               );
+                             })}
                            </div>
                         </section>
 

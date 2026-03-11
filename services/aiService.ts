@@ -2,6 +2,7 @@ import { GoogleGenAI, FunctionDeclaration, Type, GenerateContentResponse, Conten
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { TOOLS } from '../constants';
+import { DEFAULT_MODELS } from '../constants';
 import { UserProfile, NewsItem, AIProvider } from '../types';
 
 /**
@@ -103,7 +104,7 @@ export const transcribeAudio = async (base64Audio: string, mimeType: string): Pr
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   try {
     const response: GenerateContentResponse = await withRetry(() => ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: DEFAULT_MODELS.gemini,
       contents: [{ parts: [{ inlineData: { data: base64Audio, mimeType } }, { text: "Precisely transcribe this financial query." }] }]
     }));
     return response.text || "";
@@ -120,7 +121,8 @@ export const sendMessageToAI = async (
   onStream?: (text: string, sources?: {uri: string, title: string}[]) => void,
   attachments?: { data: string, mimeType: string }[],
   saveHistory: boolean = true,
-  provider: AIProvider = 'gemini'
+  provider: AIProvider = 'gemini',
+  model?: string
 ): Promise<{text: string, sources: {uri: string, title: string}[]}> => {
   
   const currentParts: Part[] = [{ text: message }];
@@ -131,6 +133,7 @@ export const sendMessageToAI = async (
   }
 
   const currentContent: Content = { role: 'user', parts: currentParts };
+  const resolvedModel = model || DEFAULT_MODELS[provider];
   
   if (provider === 'gemini') {
       if (!process.env.GEMINI_API_KEY) throw new Error("CORE_NODE_OFFLINE");
@@ -138,7 +141,7 @@ export const sendMessageToAI = async (
 
       try {
         const responseStream: any = await ai.models.generateContentStream({
-          model: 'gemini-3-flash-preview',
+          model: resolvedModel,
           contents: [...chatHistory, currentContent],
           config: {
             systemInstruction: getSystemInstruction(profile),
@@ -222,7 +225,7 @@ export const sendMessageToAI = async (
           ];
 
           const stream = await openai.chat.completions.create({
-              model: 'gpt-4o',
+              model: resolvedModel,
               messages: messages,
               stream: true,
               tools: [
@@ -338,7 +341,7 @@ export const sendMessageToAI = async (
           ];
 
           const stream = await anthropic.messages.create({
-              model: 'claude-3-5-sonnet-20241022',
+              model: resolvedModel,
               max_tokens: 4096,
               system: getSystemInstruction(profile),
               messages: messages,
@@ -437,10 +440,10 @@ export const fetchRealTimeIntel = async (): Promise<NewsItem[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: \`Perform a search for the latest 4 Indian statutory updates (GST, Income Tax, Companies Act). 
+      model: DEFAULT_MODELS.gemini,
+      contents: `Perform a search for the latest 4 Indian statutory updates (GST, Income Tax, Companies Act). 
       Format strictly as a JSON array of NewsItem objects: [{id, title, category, date, summary, impactLevel}]. 
-      Only return the JSON inside a markdown code block.\`,
+      Only return the JSON inside a markdown code block.`,
       config: { tools: [{ googleSearch: {} }] }
     });
 
@@ -452,7 +455,7 @@ export const fetchRealTimeIntel = async (): Promise<NewsItem[]> => {
       });
     }
 
-    const jsonMatch = (response.text || "").match(/\`\`\`json\\s*([\\s\\S]*?)\\s*\`\`\`/);
+    const jsonMatch = (response.text || "").match(/```json\s*([\s\S]*?)\s*```/);
     if (jsonMatch) {
       const news: NewsItem[] = JSON.parse(jsonMatch[1]);
       return news.map(item => ({ ...item, sources: searchSources }));

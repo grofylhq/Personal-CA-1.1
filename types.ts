@@ -89,6 +89,7 @@ export interface UserProfile {
   memoryBank: string; 
   subscription: SubscriptionStatus;
   preferredAIProvider?: AIProvider;
+  preferredModel?: string;
 }
 
 export interface UserAccount {
@@ -121,6 +122,13 @@ export interface NewsItem {
 export type AppView = 'chat' | 'dashboard';
 
 export type AIProvider = 'gemini' | 'openai' | 'anthropic';
+
+export interface AIModelConfig {
+  id: string;
+  name: string;
+  provider: AIProvider;
+  description: string;
+}
 
 export interface CalculatorState {
   [key: string]: any;
