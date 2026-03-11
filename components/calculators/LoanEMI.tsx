@@ -13,12 +13,17 @@ const LoanEMICalculator: React.FC<Props> = ({ initialData }) => {
   useEffect(() => {
     const r = rate / 12 / 100;
     const n = tenure * 12;
-    const emi = (principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+    let emi = 0;
+    if (r === 0) {
+      emi = principal / n;
+    } else {
+      emi = (principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+    }
     const totalPayable = emi * n;
     setResult({
-      emi: Math.round(emi),
-      total: Math.round(totalPayable),
-      interest: Math.round(totalPayable - principal)
+      emi: isFinite(emi) ? Math.round(emi) : 0,
+      total: isFinite(totalPayable) ? Math.round(totalPayable) : 0,
+      interest: isFinite(totalPayable) ? Math.round(totalPayable - principal) : 0
     });
   }, [principal, rate, tenure]);
 

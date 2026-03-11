@@ -39,7 +39,8 @@ const ComplianceCalendar: React.FC<Props> = ({ profile, onUpdateProfile }) => {
   ], []);
 
   const filteredEvents = useMemo(() => {
-    return allEvents.filter(ev => profile.complianceTracks.includes(ev.cat));
+    const tracks = profile.complianceTracks || [];
+    return allEvents.filter(ev => tracks.includes(ev.cat));
   }, [allEvents, profile.complianceTracks]);
 
   const toggleTrack = (trackId: string) => {

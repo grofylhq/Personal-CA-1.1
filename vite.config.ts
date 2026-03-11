@@ -8,8 +8,8 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: {
-      // Explicitly define process.env.API_KEY to ensure it gets replaced during build
-      'process.env.API_KEY': JSON.stringify(env.API_KEY)
+      // Explicitly define process.env.GEMINI_API_KEY to ensure it gets replaced during build
+      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
     },
     build: {
       outDir: 'dist',

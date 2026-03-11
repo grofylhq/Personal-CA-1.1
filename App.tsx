@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Content } from "@google/genai";
 import { Message, UserProfile, AppView, ChatSession, UserAccount, SubscriptionTier, DraftDocument } from './types';
-import { sendMessageToGemini, transcribeAudio, resetChatSession, clearChatSession, initializeGemini } from './services/geminiService';
+import { sendMessageToAI, transcribeAudio, resetChatSession, clearChatSession, initializeAI } from './services/aiService';
 import { authAPI, userAPI } from './services/database';
 import ToolsPanel from './components/ToolsPanel';
 import NewsPanel from './components/NewsPanel';
@@ -15,6 +15,7 @@ import DocumentCanvas from './components/DocumentCanvas';
 import { Logo } from './components/Logo';
 import { SUGGESTIONS } from './constants';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import { 
   Send, Mic, LayoutGrid, Bell, Bot, User, 
   FileText, Calculator, TrendingUp, 
@@ -49,23 +50,10 @@ const ThinkingDots: React.FC = () => (
  */
 export const secureSanitize = (html: string): string => {
   if (!html) return '';
-  return html
-    // Remove script tags and content
-    .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
-    // Remove event handlers (e.g., onload, onerror, onclick)
-    .replace(/ on\w+="[^"]*"/gim, "")
-    .replace(/ on\w+='[^']*'/gim, "")
-    // Remove javascript: pseudo-protocol
-    .replace(/javascript:/gim, "")
-    // Remove dangerous tags
-    .replace(/<iframe\b[^>]*>([\s\S]*?)<\/iframe>/gim, "")
-    .replace(/<object\b[^>]*>([\s\S]*?)<\/object>/gim, "")
-    .replace(/<embed\b[^>]*>([\s\S]*?)<\/embed>/gim, "")
-    .replace(/<form\b[^>]*>([\s\S]*?)<\/form>/gim, "")
-    .replace(/<base\b[^>]*>/gim, "")
-    // Remove metadata/link tags
-    .replace(/<link\b[^>]*>/gim, "")
-    .replace(/<meta\b[^>]*>/gim, "");
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'blockquote', 'code', 'pre', 'span', 'div'],
+    ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'id']
+  });
 };
 
 const TypingText: React.FC<{ text: string; isStreaming: boolean; isLast: boolean }> = ({ text, isStreaming, isLast }) => {
@@ -336,7 +324,7 @@ const App: React.FC = () => {
           parts: [{ text: m.content }]
         });
       });
-      initializeGemini(currentUser.profile, geminiHistory); 
+      initializeAI(currentUser.profile, geminiHistory); 
     }
   };
 
@@ -375,11 +363,11 @@ const App: React.FC = () => {
     if (!input.trim() || isOptimizing) return;
     setIsOptimizing(true);
     try {
-      const result = await sendMessageToGemini(
+      const result = await sendMessageToAI(
         `Convert this into a formal, high-precision financial query for a Senior CA: "${input}". 
         Be professional, include relevant Indian tax section if applicable. 
         Only return the refined query text.`,
-        () => {}, () => {}, currentUser?.profile
+        () => {}, () => {}, currentUser?.profile, undefined, undefined, false, currentUser?.profile.preferredAIProvider || 'gemini'
       );
       if (result.text) {
         const cleaned = result.text.replace(/^["'“”‘«]|["'“”’»]$/g, '').trim();
@@ -448,7 +436,7 @@ const App: React.FC = () => {
     setIsLoading(true); setIsStreaming(true);
 
     try {
-      const finalResponse = await sendMessageToGemini(
+      const finalResponse = await sendMessageToAI(
         textToSend, 
         handleToolCall,
         handleDraftCall,
@@ -457,7 +445,9 @@ const App: React.FC = () => {
           setIsLoading(false);
           setMessages(prev => prev.map(m => m.id === modelMsgId ? { ...m, content: streamedText, groundingSources: sources } : m));
         },
-        attachments
+        attachments,
+        true,
+        nextProfile.preferredAIProvider || 'gemini'
       );
       
       const finalModelMsg: Message = { 
@@ -769,6 +759,11 @@ const App: React.FC = () => {
                                 </button>
                             </div>
                           ))}
+                        </div>
+                      )}
+                      {fileError && (
+                        <div className="px-4 py-2 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 text-xs rounded-xl border border-rose-200 dark:border-rose-900/50 flex items-center gap-2 animate-fade-in">
+                          <AlertCircle size={14} /> {fileError}
                         </div>
                       )}
 

@@ -59,7 +59,7 @@ const BreakEvenCalculator: React.FC<Props> = ({ initialData }) => {
               <div className="mt-8 pt-6 border-t border-white/10 dark:border-white/5 grid grid-cols-2 gap-4">
                  <div>
                     <p className="text-slate-400 text-[10px] uppercase font-bold mb-1">Break-Even Sales</p>
-                    <p className="text-lg font-bold">₹{result.sales.toLocaleString()}</p>
+                    <p className="text-lg font-bold">{typeof result.sales === 'number' ? `₹${result.sales.toLocaleString()}` : result.sales}</p>
                  </div>
                  <div>
                     <p className="text-slate-400 text-[10px] uppercase font-bold mb-1">Unit Contribution</p>

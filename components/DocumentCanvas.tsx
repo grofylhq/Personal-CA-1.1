@@ -3,6 +3,7 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { X, FileText, Download, Printer, Sparkles, ChevronDown, ExternalLink } from 'lucide-react';
 import { marked } from 'marked';
 import { DraftDocument } from '../types';
+import { secureSanitize } from '../App';
 
 interface Props {
   draft: DraftDocument;
@@ -29,7 +30,8 @@ const DocumentCanvas: React.FC<Props> = ({ draft, onClose, isFullscreen, onToggl
   const htmlContent = useMemo(() => {
     if (!draft?.content) return '';
     marked.setOptions({ gfm: true, breaks: true });
-    return marked.parse(draft.content);
+    const rawHTML = marked.parse(draft.content) as string;
+    return secureSanitize(rawHTML);
   }, [draft?.content]);
 
   const handlePrint = () => {

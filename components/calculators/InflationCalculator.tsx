@@ -14,8 +14,8 @@ const InflationCalculator: React.FC<Props> = ({ initialData }) => {
     const futureValue = amount * Math.pow(1 + rate/100, years);
     const purchasingPower = amount / Math.pow(1 + rate/100, years);
     setResult({
-      future: Math.round(futureValue),
-      power: Math.round(purchasingPower)
+      future: isFinite(futureValue) ? Math.round(futureValue) : 0,
+      power: isFinite(purchasingPower) ? Math.round(purchasingPower) : 0
     });
   }, [amount, rate, years]);
 

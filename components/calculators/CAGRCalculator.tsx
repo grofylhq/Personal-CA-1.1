@@ -12,9 +12,10 @@ const CAGRCalculator: React.FC<Props> = ({ initialData }) => {
 
   useEffect(() => {
     const cagr = (Math.pow(finalValue / initialValue, 1 / years) - 1) * 100;
+    const multiplier = finalValue / initialValue;
     setResult({
-      rate: cagr.toFixed(2),
-      multiplier: (finalValue / initialValue).toFixed(2)
+      rate: isFinite(cagr) ? cagr.toFixed(2) : 'N/A',
+      multiplier: isFinite(multiplier) ? multiplier.toFixed(2) : 'N/A'
     });
   }, [initialValue, finalValue, years]);
 

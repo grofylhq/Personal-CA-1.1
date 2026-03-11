@@ -95,7 +95,7 @@ const StartupRunway: React.FC<Props> = ({ initialData }) => {
 
               <div className="mt-6 flex items-center gap-2 text-[10px] font-bold bg-white/10 dark:bg-white/5 p-3 rounded-xl border border-white/5">
                  <Zap size={14} className="text-amber-400" />
-                 <span>REDUCE VARIABLE BURN BY 20% TO ADD {Math.round(result.runway * 1.25) - result.runway} MONTHS</span>
+                 <span>{typeof result.runway === 'number' ? `REDUCE VARIABLE BURN BY 20% TO ADD ${Math.round(result.runway * 1.25) - result.runway} MONTHS` : 'RUNWAY IS INFINITE, NO NEED TO REDUCE BURN'}</span>
               </div>
            </div>
         </div>

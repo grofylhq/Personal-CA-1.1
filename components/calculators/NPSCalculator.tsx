@@ -14,23 +14,29 @@ const NPSCalculator: React.FC<Props> = ({ initialData }) => {
 
   useEffect(() => {
     const years = 60 - age;
-    const months = years * 12;
+    const months = years > 0 ? years * 12 : 0;
     const monthlyRate = rate / 12 / 100;
     
-    let totalCorpus = investment * ((Math.pow(1 + monthlyRate, months) - 1) / monthlyRate) * (1 + monthlyRate);
+    let totalCorpus = 0;
     let invested = investment * months;
+    
+    if (monthlyRate === 0) {
+      totalCorpus = invested;
+    } else {
+      totalCorpus = investment * ((Math.pow(1 + monthlyRate, months) - 1) / monthlyRate) * (1 + monthlyRate);
+    }
     
     const annuity = (totalCorpus * annuityRatio) / 100;
     const lumpSum = totalCorpus - annuity;
     const estPension = (annuity * 0.06) / 12; // Assuming 6% annuity rate
 
     setResult({
-      totalCorpus,
+      totalCorpus: isFinite(totalCorpus) ? totalCorpus : 0,
       invested,
-      lumpSum,
-      annuity,
-      estPension,
-      taxBenefit: Math.min(50000, invested / years) * 0.3 // Simplified Sec 80CCD(1B) benefit
+      lumpSum: isFinite(lumpSum) ? lumpSum : 0,
+      annuity: isFinite(annuity) ? annuity : 0,
+      estPension: isFinite(estPension) ? estPension : 0,
+      taxBenefit: years > 0 ? Math.min(50000, invested / years) * 0.3 : 0 // Simplified Sec 80CCD(1B) benefit
     });
   }, [investment, age, rate, annuityRatio]);
 

@@ -11,12 +11,12 @@ const MarginCalculator: React.FC<Props> = ({ initialData }) => {
 
   useEffect(() => {
     const profit = price - cost;
-    const margin = (profit / price) * 100;
-    const markup = (profit / cost) * 100;
+    const margin = price !== 0 ? (profit / price) * 100 : 0;
+    const markup = cost !== 0 ? (profit / cost) * 100 : 0;
     setResult({
       profit,
-      margin: margin.toFixed(2),
-      markup: markup.toFixed(2)
+      margin: isFinite(margin) ? margin.toFixed(2) : '0.00',
+      markup: isFinite(markup) ? markup.toFixed(2) : '0.00'
     });
   }, [cost, price]);
 

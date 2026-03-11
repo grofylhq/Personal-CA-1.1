@@ -78,7 +78,7 @@ const FDCalculator: React.FC<Props> = ({ initialData }) => {
               </div>
               <div>
                  <p className="text-slate-400 text-[10px] uppercase font-bold mb-1">Total ROI</p>
-                 <p className="text-lg font-bold">{((result.interest / principal) * 100).toFixed(1)}%</p>
+                 <p className="text-lg font-bold">{principal > 0 ? ((result.interest / principal) * 100).toFixed(1) : '0.0'}%</p>
               </div>
            </div>
         </div>

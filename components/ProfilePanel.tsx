@@ -9,7 +9,7 @@ import {
   Trash2, Landmark, Smartphone, FileText, LogOut, BellRing,
   Fingerprint, ShieldCheck, Database, Zap, ArrowRight, Activity, ShieldAlert,
   Cpu, Globe, ShieldHalf, LayoutGrid, Eye, Search, AlertCircle, ChevronRight,
-  User, Camera, Phone, Mail, UserCog, Briefcase, MapPin, Factory, Plus
+  User, Camera, Phone, Mail, UserCog, Briefcase, MapPin, Factory, Plus, Bot
 } from 'lucide-react';
 import { Logo } from './Logo';
 
