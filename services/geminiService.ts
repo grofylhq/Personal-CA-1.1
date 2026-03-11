@@ -1,6 +1,7 @@
 
 import { GoogleGenAI, FunctionDeclaration, Type, GenerateContentResponse, Content, Part } from "@google/genai";
 import { TOOLS } from '../constants';
+import { DEFAULT_MODELS } from '../constants';
 import { UserProfile, NewsItem } from '../types';
 
 /**
@@ -102,7 +103,7 @@ export const transcribeAudio = async (base64Audio: string, mimeType: string): Pr
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   try {
     const response: GenerateContentResponse = await withRetry(() => ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: DEFAULT_MODELS.gemini,
       contents: [{ parts: [{ inlineData: { data: base64Audio, mimeType } }, { text: "Precisely transcribe this financial query." }] }]
     }));
     return response.text || "";
@@ -135,7 +136,7 @@ export const sendMessageToGemini = async (
   
   try {
     const responseStream: any = await ai.models.generateContentStream({
-      model: 'gemini-3-flash-preview',
+      model: DEFAULT_MODELS.gemini,
       contents: [...chatHistory, currentContent],
       config: {
         systemInstruction: getSystemInstruction(profile),
@@ -211,7 +212,7 @@ export const fetchRealTimeIntel = async (): Promise<NewsItem[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: DEFAULT_MODELS.gemini,
       contents: `Perform a search for the latest 4 Indian statutory updates (GST, Income Tax, Companies Act). 
       Format strictly as a JSON array of NewsItem objects: [{id, title, category, date, summary, impactLevel}]. 
       Only return the JSON inside a markdown code block.`,

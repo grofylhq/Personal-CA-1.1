@@ -199,7 +199,7 @@ const App: React.FC = () => {
             parts: [{ text: m.content }]
           });
         });
-        initializeGemini(currentUser.profile, geminiHistory);
+        initializeAI(currentUser.profile, geminiHistory);
       }
     }
   }, [currentUser?.profile.currentSessionId]);
@@ -367,7 +367,7 @@ const App: React.FC = () => {
         `Convert this into a formal, high-precision financial query for a Senior CA: "${input}". 
         Be professional, include relevant Indian tax section if applicable. 
         Only return the refined query text.`,
-        () => {}, () => {}, currentUser?.profile, undefined, undefined, false, currentUser?.profile.preferredAIProvider || 'gemini'
+        () => {}, () => {}, currentUser?.profile, undefined, undefined, false, currentUser?.profile.preferredAIProvider || 'gemini', currentUser?.profile.preferredModel
       );
       if (result.text) {
         const cleaned = result.text.replace(/^["'“”‘«]|["'“”’»]$/g, '').trim();
@@ -447,7 +447,8 @@ const App: React.FC = () => {
         },
         attachments,
         true,
-        nextProfile.preferredAIProvider || 'gemini'
+        nextProfile.preferredAIProvider || 'gemini',
+        nextProfile.preferredModel
       );
       
       const finalModelMsg: Message = { 
