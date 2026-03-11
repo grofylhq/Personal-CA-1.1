@@ -406,35 +406,21 @@ const localUser = {
   },
 };
 
-// ─── Exported APIs: auto-select Supabase or localStorage ─────────────────────
+// ─── Exported APIs: localStorage-based temporary auth ────────────────────────
+// All data is saved locally in the browser's localStorage.
+// Supabase implementations are retained above for future production use.
 
 export const authAPI = {
-  login: (email: string, password: string) =>
-    isSupabaseConfigured() ? supabaseAuth.login(email, password) : localAuth.login(email, password),
-
-  loginWithGoogle: () =>
-    isSupabaseConfigured() ? supabaseAuth.loginWithGoogle() : localAuth.loginWithGoogle(),
-
-  register: (email: string, password: string, name: string) =>
-    isSupabaseConfigured()
-      ? supabaseAuth.register(email, password, name)
-      : localAuth.register(email, password, name),
-
-  logout: () =>
-    isSupabaseConfigured() ? supabaseAuth.logout() : localAuth.logout(),
-
-  getSession: (): UserAccount | null =>
-    isSupabaseConfigured() ? supabaseAuth.getSession() : localAuth.getSession(),
+  login: (email: string, password: string) => localAuth.login(email, password),
+  loginWithGoogle: () => localAuth.loginWithGoogle(),
+  register: (email: string, password: string, name: string) => localAuth.register(email, password, name),
+  logout: () => localAuth.logout(),
+  getSession: (): UserAccount | null => localAuth.getSession(),
 };
 
 export const userAPI = {
   updateProfile: (accountId: string, updates: Partial<UserProfile>) =>
-    isSupabaseConfigured()
-      ? supabaseUser.updateProfile(accountId, updates)
-      : localUser.updateProfile(accountId, updates),
-
+    localUser.updateProfile(accountId, updates),
   upgradeSubscription: (accountId: string, tier: SubscriptionTier) =>
-    isSupabaseConfigured()
-      ? supabaseUser.upgradeSubscription(accountId, tier)
-      : localUser.upgradeSubscription(accountId, tier),
+    localUser.upgradeSubscription(accountId, tier),
 };
