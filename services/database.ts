@@ -104,6 +104,7 @@ const supabaseAuth = {
       session.user.email ?? '',
       session.user.user_metadata?.full_name ?? 'Google User',
       session.user.user_metadata?.avatar_url ?? '',
+      true,
     );
 
     return {
@@ -179,6 +180,7 @@ const supabaseUser = {
     email: string,
     name: string,
     avatarUrl = '',
+    isOAuth = false,
   ): Promise<UserProfile> => {
     const sb = getSupabaseClient()!;
 
@@ -193,8 +195,8 @@ const supabaseUser = {
 
     const newProfile = createDefaultProfile(userId, email, name, {
       avatarUrl,
-      memoryBank: avatarUrl ? 'Google Linked Account Initialized.' : '',
-      designation: avatarUrl ? 'Strategic Investor' : 'Executive',
+      memoryBank: isOAuth ? 'Google Linked Account Initialized.' : '',
+      designation: isOAuth ? 'Strategic Investor' : 'Executive',
     });
 
     const { data, error } = await sb
@@ -246,8 +248,10 @@ const supabaseUser = {
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function hashPassword(password: string): Promise<string> {
-  // Per-password salt derived from the email-normalized input to avoid static salts.
-  const salt = 'pca_v2_' + password.length + '_' + password.charCodeAt(0);
+  // NOTE: This localStorage fallback uses a simple deterministic salt.
+  // In production, Supabase Auth handles password hashing with bcrypt.
+  // This is only used when SUPABASE_URL/SUPABASE_ANON_KEY are not configured.
+  const salt = 'pca_local_demo_salt_v2';
   const salted = password + salt;
   const msgBuffer = new TextEncoder().encode(salted);
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
