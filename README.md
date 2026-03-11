@@ -2,19 +2,70 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# Personal CA — AI Financial Assistant
 
-This contains everything you need to run your app locally.
+An advanced AI-powered financial, compliance, and business-intelligence assistant for entrepreneurs and finance teams in India. Built with React, TypeScript, and multiple AI providers.
 
-View your app in AI Studio: https://ai.studio/apps/5385af2a-408e-44d6-a2c3-a0f75a959f28
+## Features
+
+- **Multi-Provider AI Chat** — Google Gemini, OpenAI GPT, and Anthropic Claude
+- **16 Financial Calculators** — GST, Income Tax, Capital Gains, SIP, NPS, FD, and more
+- **Document Drafting** — Legal, Tax, and Corporate document generation
+- **Real-time News** — AI-powered financial intelligence stream
+- **Financial Dashboard** — Net worth, asset allocation, cash flow visualisation
+- **Supabase Backend** — Auth (email/password, Google OAuth) and Postgres database
+- **Offline Fallback** — Works with localStorage when Supabase is not configured
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
-
+**Prerequisites:** Node.js 18+
 
 1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+   ```bash
+   npm install
+   ```
+
+2. Create a `.env.local` file with your API keys:
+   ```env
+   GEMINI_API_KEY=your_gemini_api_key
+
+   # Optional: additional AI providers
+   OPENAI_API_KEY=your_openai_api_key
+   ANTHROPIC_API_KEY=your_anthropic_api_key
+
+   # Optional: Supabase backend (falls back to localStorage if not set)
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_ANON_KEY=your_anon_key
+   ```
+
 3. Run the app:
-   `npm run dev`
+   ```bash
+   npm run dev
+   ```
+
+## Supabase Setup (Production)
+
+1. Create a new [Supabase](https://supabase.com) project.
+2. Run the SQL schema in your Supabase SQL Editor:
+   ```bash
+   # File: supabase/schema.sql
+   ```
+3. Enable **Google OAuth** in Supabase → Authentication → Providers (optional).
+4. Copy your project URL and anon key into `.env.local`.
+
+## Build for Production
+
+```bash
+npm run build      # Outputs to dist/
+npm run preview    # Preview the production build
+```
+
+## Environment Variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `GEMINI_API_KEY` | Yes | Google Gemini API key |
+| `OPENAI_API_KEY` | No | OpenAI API key (for GPT models) |
+| `ANTHROPIC_API_KEY` | No | Anthropic API key (for Claude models) |
+| `SUPABASE_URL` | No | Supabase project URL |
+| `SUPABASE_ANON_KEY` | No | Supabase anonymous key |

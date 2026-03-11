@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { MOCK_NEWS } from '../constants';
 import { UserProfile, NewsItem } from '../types';
-import { fetchRealTimeIntel } from '../services/geminiService';
+import { fetchRealTimeIntel } from '../services/aiService';
 import { 
   Bell, X, ArrowRight, Rss, Loader2, Sparkles, 
   AlertCircle, Calendar, RefreshCcw, ExternalLink,

@@ -1,20 +1,10 @@
 
 import { UserAccount, UserProfile, SubscriptionTier } from '../types';
+import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient';
 
+// ─── Local-storage keys (fallback when Supabase is not configured) ───────────
 const DB_KEY_USERS = 'pca_users';
 const DB_KEY_SESSION = 'pca_current_user';
-// Static salt for local demo security. In production, use per-user salt on backend.
-const SALT = "pca_v2_core_salt_738491";
-
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-async function hashPassword(password: string): Promise<string> {
-  const salted = password + SALT;
-  const msgBuffer = new TextEncoder().encode(salted);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
 
 /**
  * Hardened utility to recursively restore Date objects and ensure data integrity.
@@ -22,20 +12,15 @@ async function hashPassword(password: string): Promise<string> {
  */
 function deepHydrate(obj: any, seen = new WeakSet()): any {
   if (obj === null || typeof obj !== 'object') {
-    // String to Date detection for ISO strings
     if (typeof obj === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(obj)) {
       const d = new Date(obj);
       return isNaN(d.getTime()) ? obj : d;
     }
     return obj;
   }
-
-  // Handle circular references if any (though unlikely in stored JSON)
   if (seen.has(obj)) return obj;
   seen.add(obj);
-
   if (Array.isArray(obj)) return obj.map(v => deepHydrate(v, seen));
-
   const result: any = {};
   for (const key of Object.keys(obj)) {
     // SECURITY: Explicitly exclude dangerous properties to prevent prototype pollution
@@ -45,16 +30,247 @@ function deepHydrate(obj: any, seen = new WeakSet()): any {
   return result;
 }
 
-export const authAPI = {
+/** Build a default blank UserProfile for new registrations. */
+function createDefaultProfile(
+  id: string,
+  email: string,
+  name: string,
+  extra: Partial<UserProfile> = {}
+): UserProfile {
+  return {
+    id,
+    email,
+    name,
+    phoneNumber: '',
+    designation: 'Executive',
+    companyName: '',
+    businessAddress: '',
+    industryType: '',
+    avatarUrl: '',
+    monthlyIncome: 0,
+    monthlyExpenses: 0,
+    assets: { cash: 0, equity: 0, realEstate: 0, emergencyFund: 0, gold: 0 },
+    liabilities: { homeLoan: 0, personalLoan: 0, creditCard: 0 },
+    riskAppetite: 'Moderate',
+    goals: [],
+    investmentPreferences: [],
+    complianceTracks: ['Income Tax', 'GST'],
+    documents: [],
+    drafts: [],
+    linkedAccounts: [],
+    chatSessions: [],
+    currentSessionId: null,
+    memoryBank: '',
+    subscription: { tier: 'free', messageCount: 0 },
+    ...extra,
+  };
+}
+
+// ─── Supabase-backed implementation ──────────────────────────────────────────
+
+const supabaseAuth = {
+  login: async (email: string, password: string): Promise<UserAccount> => {
+    const sb = getSupabaseClient()!;
+    const { data, error } = await sb.auth.signInWithPassword({
+      email: email.toLowerCase().trim(),
+      password,
+    });
+    if (error || !data.user) throw new Error(error?.message ?? 'Authentication failed');
+
+    const profile = await supabaseUser.fetchProfile(data.user.id);
+    return {
+      id: data.user.id,
+      email: data.user.email ?? email,
+      passwordHash: '',
+      name: profile.name,
+      profile,
+    };
+  },
+
+  loginWithGoogle: async (): Promise<UserAccount> => {
+    const sb = getSupabaseClient()!;
+    const { error } = await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) throw new Error(error.message);
+
+    // After redirect the session is available synchronously:
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session?.user) throw new Error('Google sign-in did not complete');
+
+    const profile = await supabaseUser.ensureProfile(
+      session.user.id,
+      session.user.email ?? '',
+      session.user.user_metadata?.full_name ?? 'Google User',
+      session.user.user_metadata?.avatar_url ?? '',
+      true,
+    );
+
+    return {
+      id: session.user.id,
+      email: session.user.email ?? '',
+      passwordHash: '',
+      name: profile.name,
+      profile,
+    };
+  },
+
+  register: async (email: string, password: string, name: string): Promise<UserAccount> => {
+    const sb = getSupabaseClient()!;
+    const cleanEmail = email.toLowerCase().trim();
+    const { data, error } = await sb.auth.signUp({
+      email: cleanEmail,
+      password,
+      options: { data: { full_name: name.trim() } },
+    });
+    if (error) throw new Error(error.message);
+    if (!data.user) throw new Error('Registration failed');
+
+    const profile = await supabaseUser.ensureProfile(
+      data.user.id,
+      cleanEmail,
+      name.trim(),
+    );
+
+    return {
+      id: data.user.id,
+      email: cleanEmail,
+      passwordHash: '',
+      name: name.trim(),
+      profile,
+    };
+  },
+
+  logout: async () => {
+    const sb = getSupabaseClient()!;
+    await sb.auth.signOut();
+  },
+
+  getSession: (): UserAccount | null => {
+    // Synchronous call – we also cache in localStorage for instant hydration.
+    // The real session refresh happens asynchronously via Supabase's auto-refresh.
+    try {
+      const saved = localStorage.getItem(DB_KEY_SESSION);
+      if (!saved) return null;
+      return deepHydrate(JSON.parse(saved));
+    } catch {
+      localStorage.removeItem(DB_KEY_SESSION);
+      return null;
+    }
+  },
+};
+
+const supabaseUser = {
+  /** Fetch a profile row from the `profiles` table. */
+  fetchProfile: async (userId: string): Promise<UserProfile> => {
+    const sb = getSupabaseClient()!;
+    const { data, error } = await sb
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+    if (error || !data) throw new Error('Profile not found');
+    return deepHydrate(data) as UserProfile;
+  },
+
+  /** Upsert a profile – used after first sign-in / registration. */
+  ensureProfile: async (
+    userId: string,
+    email: string,
+    name: string,
+    avatarUrl = '',
+    isOAuth = false,
+  ): Promise<UserProfile> => {
+    const sb = getSupabaseClient()!;
+
+    // Try to read first
+    const { data: existing } = await sb
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (existing) return deepHydrate(existing) as UserProfile;
+
+    const newProfile = createDefaultProfile(userId, email, name, {
+      avatarUrl,
+      memoryBank: isOAuth ? 'Google Linked Account Initialized.' : '',
+      designation: isOAuth ? 'Strategic Investor' : 'Executive',
+    });
+
+    const { data, error } = await sb
+      .from('profiles')
+      .insert(newProfile)
+      .select()
+      .single();
+    if (error || !data) throw new Error(error?.message ?? 'Failed to create profile');
+    return deepHydrate(data) as UserProfile;
+  },
+
+  updateProfile: async (accountId: string, updates: Partial<UserProfile>): Promise<UserAccount> => {
+    const sb = getSupabaseClient()!;
+    const { data, error } = await sb
+      .from('profiles')
+      .update(updates)
+      .eq('id', accountId)
+      .select()
+      .single();
+    if (error || !data) throw new Error(error?.message ?? 'Profile update failed');
+
+    const profile = deepHydrate(data) as UserProfile;
+    const account: UserAccount = {
+      id: accountId,
+      email: profile.email,
+      passwordHash: '',
+      name: updates.name ?? profile.name,
+      profile,
+    };
+
+    // Keep local cache in sync
+    localStorage.setItem(DB_KEY_SESSION, JSON.stringify(account));
+    return account;
+  },
+
+  upgradeSubscription: async (accountId: string, tier: SubscriptionTier): Promise<UserAccount> => {
+    return supabaseUser.updateProfile(accountId, {
+      subscription: {
+        tier,
+        messageCount: 0,
+        expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    });
+  },
+};
+
+// ─── localStorage-backed fallback (original implementation) ──────────────────
+
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function hashPassword(password: string): Promise<string> {
+  // NOTE: This localStorage fallback uses a simple deterministic salt.
+  // In production, Supabase Auth handles password hashing with bcrypt.
+  // This is only used when SUPABASE_URL/SUPABASE_ANON_KEY are not configured.
+  const salt = 'pca_local_demo_salt_v2';
+  const salted = password + salt;
+  const msgBuffer = new TextEncoder().encode(salted);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+const localAuth = {
   login: async (email: string, password: string): Promise<UserAccount> => {
     await delay(600);
     const usersRaw = localStorage.getItem(DB_KEY_USERS);
     const users: UserAccount[] = usersRaw ? JSON.parse(usersRaw) : [];
     const hashedPassword = await hashPassword(password);
-    
-    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase().trim() && u.passwordHash === hashedPassword);
+
+    const user = users.find(
+      u => u.email.toLowerCase() === email.toLowerCase().trim() && u.passwordHash === hashedPassword
+    );
     if (!user) throw new Error('Invalid Credentials / Identity Node Mismatch');
-    
+
     const hydratedUser = deepHydrate(user);
     localStorage.setItem(DB_KEY_SESSION, JSON.stringify(hydratedUser));
     return hydratedUser;
@@ -64,50 +280,34 @@ export const authAPI = {
     await delay(1500);
     const usersRaw = localStorage.getItem(DB_KEY_USERS);
     const users: UserAccount[] = usersRaw ? JSON.parse(usersRaw) : [];
-    
+
     const googleIdentity = {
       email: 'investor.demo@gmail.com',
       name: 'Google User',
       id: 'google-oauth2-12345',
-      picture: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150&h=150'
+      picture: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150&h=150',
     };
 
     let user = users.find(u => u.email.toLowerCase() === googleIdentity.email.toLowerCase());
-    
+
     if (!user) {
-      const newProfile: UserProfile = {
-        id: crypto.randomUUID(),
-        email: googleIdentity.email,
-        name: googleIdentity.name,
-        phoneNumber: '',
-        designation: 'Strategic Investor',
-        companyName: '',
-        businessAddress: '',
-        industryType: '',
-        avatarUrl: googleIdentity.picture,
-        monthlyIncome: 0,
-        monthlyExpenses: 0,
-        assets: { cash: 0, equity: 0, realEstate: 0, emergencyFund: 0, gold: 0 },
-        liabilities: { homeLoan: 0, personalLoan: 0, creditCard: 0 },
-        riskAppetite: 'Moderate',
-        goals: [],
-        investmentPreferences: [],
-        complianceTracks: ['Income Tax', 'GST'],
-        documents: [],
-        drafts: [],
-        linkedAccounts: [],
-        chatSessions: [],
-        currentSessionId: null,
-        memoryBank: "Google Linked Account Initialized.",
-        subscription: { tier: 'free', messageCount: 0 }
-      };
+      const newProfile = createDefaultProfile(
+        crypto.randomUUID(),
+        googleIdentity.email,
+        googleIdentity.name,
+        {
+          avatarUrl: googleIdentity.picture,
+          designation: 'Strategic Investor',
+          memoryBank: 'Google Linked Account Initialized.',
+        },
+      );
 
       user = {
         id: newProfile.id,
         email: googleIdentity.email,
         passwordHash: 'social_linked',
         name: googleIdentity.name,
-        profile: newProfile
+        profile: newProfile,
       };
 
       users.push(user);
@@ -123,46 +323,21 @@ export const authAPI = {
     await delay(800);
     const usersRaw = localStorage.getItem(DB_KEY_USERS);
     const users: UserAccount[] = usersRaw ? JSON.parse(usersRaw) : [];
-    
+
     const cleanEmail = email.toLowerCase().trim();
     if (users.some(u => u.email.toLowerCase() === cleanEmail)) {
       throw new Error('Identity already exists in this node');
     }
 
     const hashedPassword = await hashPassword(password);
-    const newProfile: UserProfile = {
-      id: crypto.randomUUID(),
-      email: cleanEmail,
-      name: name.trim(),
-      phoneNumber: '',
-      designation: 'Executive',
-      companyName: '',
-      businessAddress: '',
-      industryType: '',
-      avatarUrl: '',
-      monthlyIncome: 0,
-      monthlyExpenses: 0,
-      assets: { cash: 0, equity: 0, realEstate: 0, emergencyFund: 0, gold: 0 },
-      liabilities: { homeLoan: 0, personalLoan: 0, creditCard: 0 },
-      riskAppetite: 'Moderate',
-      goals: [],
-      investmentPreferences: [],
-      complianceTracks: ['Income Tax', 'GST'],
-      documents: [],
-      drafts: [],
-      linkedAccounts: [],
-      chatSessions: [],
-      currentSessionId: null,
-      memoryBank: "",
-      subscription: { tier: 'free', messageCount: 0 }
-    };
+    const newProfile = createDefaultProfile(crypto.randomUUID(), cleanEmail, name.trim());
 
     const newAccount: UserAccount = {
       id: newProfile.id,
       email: cleanEmail,
       passwordHash: hashedPassword,
       name: name.trim(),
-      profile: newProfile
+      profile: newProfile,
     };
 
     users.push(newAccount);
@@ -182,14 +357,14 @@ export const authAPI = {
       if (!saved) return null;
       return deepHydrate(JSON.parse(saved));
     } catch (e) {
-      console.error("Session Retrieval Fault:", e);
+      console.error('Session Retrieval Fault:', e);
       localStorage.removeItem(DB_KEY_SESSION);
       return null;
     }
-  }
+  },
 };
 
-export const userAPI = {
+const localUser = {
   updateProfile: async (accountId: string, updates: Partial<UserProfile>): Promise<UserAccount> => {
     try {
       const usersRaw = localStorage.getItem(DB_KEY_USERS);
@@ -199,35 +374,67 @@ export const userAPI = {
 
       const existingProfile = users[idx].profile;
       const updatedProfile = { ...existingProfile, ...updates };
-
       const updatedUser = {
         ...users[idx],
         profile: updatedProfile,
-        name: updates.name || users[idx].name
+        name: updates.name || users[idx].name,
       };
 
       users[idx] = updatedUser;
       localStorage.setItem(DB_KEY_USERS, JSON.stringify(users));
-      
-      const activeSession = authAPI.getSession();
+
+      const activeSession = localAuth.getSession();
       if (activeSession && activeSession.id === accountId) {
         localStorage.setItem(DB_KEY_SESSION, JSON.stringify(updatedUser));
       }
 
       return deepHydrate(updatedUser);
     } catch (err) {
-      console.error("Profile update failed", err);
+      console.error('Profile update failed', err);
       throw err;
     }
   },
 
   upgradeSubscription: async (accountId: string, tier: SubscriptionTier): Promise<UserAccount> => {
-    return userAPI.updateProfile(accountId, {
+    return localUser.updateProfile(accountId, {
       subscription: {
         tier,
         messageCount: 0,
-        expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-      }
+        expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      },
     });
-  }
+  },
+};
+
+// ─── Exported APIs: auto-select Supabase or localStorage ─────────────────────
+
+export const authAPI = {
+  login: (email: string, password: string) =>
+    isSupabaseConfigured() ? supabaseAuth.login(email, password) : localAuth.login(email, password),
+
+  loginWithGoogle: () =>
+    isSupabaseConfigured() ? supabaseAuth.loginWithGoogle() : localAuth.loginWithGoogle(),
+
+  register: (email: string, password: string, name: string) =>
+    isSupabaseConfigured()
+      ? supabaseAuth.register(email, password, name)
+      : localAuth.register(email, password, name),
+
+  logout: () =>
+    isSupabaseConfigured() ? supabaseAuth.logout() : localAuth.logout(),
+
+  getSession: (): UserAccount | null =>
+    isSupabaseConfigured() ? supabaseAuth.getSession() : localAuth.getSession(),
+};
+
+export const userAPI = {
+  updateProfile: (accountId: string, updates: Partial<UserProfile>) =>
+    isSupabaseConfigured()
+      ? supabaseUser.updateProfile(accountId, updates)
+      : localUser.updateProfile(accountId, updates),
+
+  upgradeSubscription: (accountId: string, tier: SubscriptionTier) =>
+    isSupabaseConfigured()
+      ? supabaseUser.upgradeSubscription(accountId, tier)
+      : localUser.upgradeSubscription(accountId, tier),
 };
