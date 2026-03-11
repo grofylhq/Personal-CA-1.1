@@ -433,7 +433,7 @@ const ProfilePanel: React.FC<Props> = ({ isOpen, onClose, profile, onUpdate, the
 
                         <section className="space-y-4">
                            <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-widest px-2 flex items-center gap-2">
-                             <Cpu size={14}/> AI Engine
+                             <Cpu size={14}/> AI Model
                            </h4>
                            <div className="space-y-3">
                              {(['gemini', 'openai', 'anthropic'] as AIProvider[]).map(providerKey => {
