@@ -206,6 +206,10 @@ export const AI_MODELS: AIModelConfig[] = [
   { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', provider: 'openai', description: 'Balanced performance and speed' },
   { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', provider: 'openai', description: 'Fast and lightweight' },
   { id: 'o3-mini', name: 'o3 Mini', provider: 'openai', description: 'Advanced reasoning model' },
+  // OpenRouter
+  { id: 'openai/gpt-4.1-mini', name: 'OpenRouter GPT-4.1 Mini', provider: 'openrouter', description: 'OpenRouter route to GPT-4.1 Mini' },
+  { id: 'anthropic/claude-3.5-sonnet', name: 'OpenRouter Claude 3.5 Sonnet', provider: 'openrouter', description: 'OpenRouter route to Claude Sonnet' },
+  { id: 'google/gemini-2.0-flash-001', name: 'OpenRouter Gemini 2.0 Flash', provider: 'openrouter', description: 'OpenRouter route to Gemini Flash' },
   // Anthropic Claude
   { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', provider: 'anthropic', description: 'Latest Claude model' },
   { id: 'claude-3-7-sonnet-20250219', name: 'Claude 3.7 Sonnet', provider: 'anthropic', description: 'Enhanced intelligence' },
@@ -216,4 +220,5 @@ export const DEFAULT_MODELS: Record<AIProvider, string> = {
   gemini: 'gemini-2.5-flash',
   openai: 'gpt-4.1',
   anthropic: 'claude-sonnet-4-20250514',
+  openrouter: 'openai/gpt-4.1-mini',
 };

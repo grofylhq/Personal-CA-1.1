@@ -327,6 +327,131 @@ export const sendMessageToAI = async (
           console.error("OpenAI Error:", error);
           throw error;
       }
+  } else if (provider === 'openrouter') {
+      if (!process.env.OPENROUTER_API_KEY) throw new Error("OPENROUTER_NODE_OFFLINE");
+      const openrouter = new OpenAI({
+          apiKey: process.env.OPENROUTER_API_KEY,
+          baseURL: 'https://openrouter.ai/api/v1',
+          defaultHeaders: {
+            'HTTP-Referer': 'https://personal-ca.local',
+            'X-Title': 'Personal CA'
+          },
+          dangerouslyAllowBrowser: true
+      });
+
+      try {
+          const messages: any[] = [
+              { role: 'system', content: getSystemInstruction(profile) },
+              ...chatHistory.map(h => ({
+                  role: h.role === 'model' ? 'assistant' : 'user',
+                  content: h.parts?.map(p => p.text).join(' ') || ''
+              })),
+              { role: 'user', content: message }
+          ];
+
+          const stream = await openrouter.chat.completions.create({
+              model: resolvedModel,
+              messages: messages,
+              stream: true,
+              tools: [
+                  {
+                      type: 'function',
+                      function: {
+                          name: 'activate_tool',
+                          description: 'Initializes a specific statutory calculator or financial module.',
+                          parameters: {
+                              type: 'object',
+                              properties: {
+                                  toolId: { type: 'string', enum: TOOLS.map(t => t.id) },
+                                  initialData: { type: 'string', description: 'Prefill data as JSON string.' }
+                              },
+                              required: ['toolId']
+                          }
+                      }
+                  },
+                  {
+                      type: 'function',
+                      function: {
+                          name: 'draft_document',
+                          description: 'Generates a formal legal, tax, or corporate draft on the professional canvas.',
+                          parameters: {
+                              type: 'object',
+                              properties: {
+                                  title: { type: 'string', description: 'Formal title of the document.' },
+                                  content: { type: 'string', description: 'Complete document content in Markdown.' },
+                                  type: { type: 'string', enum: ['Legal', 'Tax', 'Corporate', 'Audit', 'Strategic'] }
+                              },
+                              required: ['title', 'content', 'type']
+                          }
+                      }
+                  }
+              ]
+          });
+
+          let fullText = '';
+          let toolCalls: any[] = [];
+          let currentToolCall: any = null;
+
+          for await (const chunk of stream) {
+              const delta = chunk.choices[0]?.delta;
+              if (delta?.content) {
+                  fullText += delta.content;
+                  if (onStream) onStream(fullText, []);
+              }
+
+              if (delta?.tool_calls) {
+                  for (const toolCall of delta.tool_calls) {
+                      if (toolCall.id) {
+                          if (currentToolCall) {
+                              toolCalls.push(currentToolCall);
+                          }
+                          currentToolCall = {
+                              id: toolCall.id,
+                              type: 'function',
+                              function: {
+                                  name: toolCall.function?.name || '',
+                                  arguments: toolCall.function?.arguments || ''
+                              }
+                          };
+                      } else if (currentToolCall && toolCall.function?.arguments) {
+                          currentToolCall.function.arguments += toolCall.function.arguments;
+                      }
+                  }
+              }
+          }
+          if (currentToolCall) {
+              toolCalls.push(currentToolCall);
+          }
+
+          if (toolCalls.length > 0) {
+              for (const call of toolCalls) {
+                  if (call.function.name === 'activate_tool') {
+                      let args: any = {};
+                      try { args = JSON.parse(call.function.arguments); } catch(e) {}
+                      let initialData = {};
+                      try { if(args.initialData) initialData = JSON.parse(args.initialData); } catch(e) {}
+                      onToolCall(args.toolId, initialData);
+                  } else if (call.function.name === 'draft_document') {
+                      let args: any = {};
+                      try { args = JSON.parse(call.function.arguments); } catch(e) {}
+                      onDraftCall(args.title, args.content, args.type);
+                  }
+              }
+          }
+
+          const finalResultText = fullText || (toolCalls.length > 0 ? "I've initialized the requested module for you." : "Transmission complete.");
+
+          if (saveHistory) {
+              chatHistory.push(currentContent);
+              chatHistory.push({ role: 'model', parts: [{ text: finalResultText }] });
+          }
+
+          return { text: finalResultText, sources: [] };
+
+      } catch (error: any) {
+          console.error("OpenRouter Error:", error);
+          throw error;
+      }
   } else if (provider === 'anthropic') {
       if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_NODE_OFFLINE");
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, dangerouslyAllowBrowser: true });
