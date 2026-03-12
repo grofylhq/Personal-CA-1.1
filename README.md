@@ -32,10 +32,13 @@ An advanced AI-powered financial, compliance, and business-intelligence assistan
    # Optional: additional AI providers
    OPENAI_API_KEY=your_openai_api_key
    ANTHROPIC_API_KEY=your_anthropic_api_key
+   OPENROUTER_API_KEY=your_openrouter_api_key
 
    # Optional: Supabase backend (falls back to localStorage if not set)
    SUPABASE_URL=https://your-project.supabase.co
    SUPABASE_ANON_KEY=your_anon_key
+   # Optional alias used by newer Supabase dashboard terminology
+   SUPABASE_PUBLISHABLE_KEY=your_publishable_key
    ```
 
 3. Run the app:
@@ -67,5 +70,7 @@ npm run preview    # Preview the production build
 | `GEMINI_API_KEY` | Yes | Google Gemini API key |
 | `OPENAI_API_KEY` | No | OpenAI API key (for GPT models) |
 | `ANTHROPIC_API_KEY` | No | Anthropic API key (for Claude models) |
+| `OPENROUTER_API_KEY` | No | OpenRouter API key (for OpenRouter-routed models) |
 | `SUPABASE_URL` | No | Supabase project URL |
 | `SUPABASE_ANON_KEY` | No | Supabase anonymous key |
+| `SUPABASE_PUBLISHABLE_KEY` | No | Supabase publishable key (alias for anon key) |

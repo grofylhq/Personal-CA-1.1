@@ -436,9 +436,9 @@ const ProfilePanel: React.FC<Props> = ({ isOpen, onClose, profile, onUpdate, the
                              <Cpu size={14}/> AI Model
                            </h4>
                            <div className="space-y-3">
-                             {(['gemini', 'openai', 'anthropic'] as AIProvider[]).map(providerKey => {
+                             {(['gemini', 'openai', 'anthropic', 'openrouter'] as AIProvider[]).map(providerKey => {
                                const providerModels = AI_MODELS.filter(m => m.provider === providerKey);
-                               const providerLabel = providerKey === 'gemini' ? 'Google Gemini' : providerKey === 'openai' ? 'OpenAI' : 'Anthropic Claude';
+                               const providerLabel = providerKey === 'gemini' ? 'Google Gemini' : providerKey === 'openai' ? 'OpenAI' : providerKey === 'anthropic' ? 'Anthropic Claude' : 'OpenRouter';
                                const selectedModel = profile.preferredModel || DEFAULT_MODELS[profile.preferredAIProvider || 'gemini'];
                                return (
                                  <div key={providerKey} className="bg-slate-50 dark:bg-white/[0.02] border border-slate-100 dark:border-white/5 rounded-2xl overflow-hidden">
