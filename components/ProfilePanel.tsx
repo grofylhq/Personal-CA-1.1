@@ -90,6 +90,14 @@ const ProfilePanel: React.FC<Props> = ({ isOpen, onClose, profile, onUpdate, the
     handleChange('documents', profile.documents.filter(d => d.id !== id));
   };
 
+
+  const handleModelSelect = (provider: AIProvider, modelId: string) => {
+    const newProfile: UserProfile = JSON.parse(JSON.stringify(profile));
+    newProfile.preferredAIProvider = provider;
+    newProfile.preferredModel = modelId;
+    onUpdate(newProfile);
+  };
+
   const handlePurge = () => {
     if (confirm("CRITICAL: This will permanently wipe all local session logs and financial profile cache. Continue?")) {
       localStorage.clear();
@@ -439,7 +447,7 @@ const ProfilePanel: React.FC<Props> = ({ isOpen, onClose, profile, onUpdate, the
                              {(['gemini', 'openai', 'anthropic', 'openrouter', 'puter'] as AIProvider[]).map(providerKey => {
                                const providerModels = AI_MODELS.filter(m => m.provider === providerKey);
                                const providerLabel = providerKey === 'gemini' ? 'Google Gemini' : providerKey === 'openai' ? 'OpenAI' : providerKey === 'anthropic' ? 'Anthropic Claude' : providerKey === 'openrouter' ? 'OpenRouter' : 'Puter.js';
-                               const selectedModel = profile.preferredModel || DEFAULT_MODELS[profile.preferredAIProvider || 'gemini'];
+                               const selectedModel = profile.preferredModel || DEFAULT_MODELS[profile.preferredAIProvider || 'puter'];
                                return (
                                  <div key={providerKey} className="bg-slate-50 dark:bg-white/[0.02] border border-slate-100 dark:border-white/5 rounded-2xl overflow-hidden">
                                    <div className="px-4 py-3 border-b border-slate-100 dark:border-white/5">
@@ -451,7 +459,7 @@ const ProfilePanel: React.FC<Props> = ({ isOpen, onClose, profile, onUpdate, the
                                        return (
                                          <button
                                            key={m.id}
-                                           onClick={() => { handleChange('preferredAIProvider', m.provider as string); handleChange('preferredModel', m.id); }}
+                                           onClick={() => handleModelSelect(m.provider, m.id)}
                                            className={`w-full flex items-center justify-between p-3 rounded-xl transition-all text-left ${
                                              isSelected
                                                ? 'bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-700 ring-1 ring-brand-500/20'

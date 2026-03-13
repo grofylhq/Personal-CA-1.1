@@ -1,5 +1,6 @@
 
 import { UserAccount, UserProfile, SubscriptionTier } from '../types';
+import { DEFAULT_MODELS } from '../constants';
 import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient';
 
 // ─── Local-storage keys (fallback when Supabase is not configured) ───────────
@@ -62,7 +63,28 @@ function createDefaultProfile(
     currentSessionId: null,
     memoryBank: '',
     subscription: { tier: 'free', messageCount: 0 },
+    preferredAIProvider: 'puter',
+    preferredModel: DEFAULT_MODELS.puter,
     ...extra,
+  };
+}
+
+
+function normalizeProfileDefaults(profile: UserProfile): UserProfile {
+  const preferredAIProvider = profile.preferredAIProvider || 'puter';
+  const preferredModel = profile.preferredModel || DEFAULT_MODELS[preferredAIProvider];
+  return {
+    ...profile,
+    preferredAIProvider,
+    preferredModel,
+  };
+}
+
+function normalizeAccountDefaults(account: UserAccount): UserAccount {
+  return {
+    ...account,
+    profile: normalizeProfileDefaults(account.profile),
+    name: account.profile?.name || account.name,
   };
 }
 
@@ -153,7 +175,7 @@ const supabaseAuth = {
     try {
       const saved = localStorage.getItem(DB_KEY_SESSION);
       if (!saved) return null;
-      return deepHydrate(JSON.parse(saved));
+      return normalizeAccountDefaults(deepHydrate(JSON.parse(saved)));
     } catch {
       localStorage.removeItem(DB_KEY_SESSION);
       return null;
@@ -171,7 +193,7 @@ const supabaseUser = {
       .eq('id', userId)
       .single();
     if (error || !data) throw new Error('Profile not found');
-    return deepHydrate(data) as UserProfile;
+    return normalizeProfileDefaults(deepHydrate(data) as UserProfile);
   },
 
   /** Upsert a profile – used after first sign-in / registration. */
@@ -191,7 +213,7 @@ const supabaseUser = {
       .eq('id', userId)
       .single();
 
-    if (existing) return deepHydrate(existing) as UserProfile;
+    if (existing) return normalizeProfileDefaults(deepHydrate(existing) as UserProfile);
 
     const newProfile = createDefaultProfile(userId, email, name, {
       avatarUrl,
@@ -205,7 +227,7 @@ const supabaseUser = {
       .select()
       .single();
     if (error || !data) throw new Error(error?.message ?? 'Failed to create profile');
-    return deepHydrate(data) as UserProfile;
+    return normalizeProfileDefaults(deepHydrate(data) as UserProfile);
   },
 
   updateProfile: async (accountId: string, updates: Partial<UserProfile>): Promise<UserAccount> => {
@@ -228,8 +250,9 @@ const supabaseUser = {
     };
 
     // Keep local cache in sync
-    localStorage.setItem(DB_KEY_SESSION, JSON.stringify(account));
-    return account;
+    const normalizedAccount = normalizeAccountDefaults(account);
+    localStorage.setItem(DB_KEY_SESSION, JSON.stringify(normalizedAccount));
+    return normalizedAccount;
   },
 
   upgradeSubscription: async (accountId: string, tier: SubscriptionTier): Promise<UserAccount> => {
@@ -271,7 +294,12 @@ const localAuth = {
     );
     if (!user) throw new Error('Invalid Credentials / Identity Node Mismatch');
 
-    const hydratedUser = deepHydrate(user);
+    const hydratedUser = normalizeAccountDefaults(deepHydrate(user));
+    const userIdx = users.findIndex(u => u.id === hydratedUser.id);
+    if (userIdx >= 0) {
+      users[userIdx] = hydratedUser;
+      localStorage.setItem(DB_KEY_USERS, JSON.stringify(users));
+    }
     localStorage.setItem(DB_KEY_SESSION, JSON.stringify(hydratedUser));
     return hydratedUser;
   },
@@ -314,7 +342,12 @@ const localAuth = {
       localStorage.setItem(DB_KEY_USERS, JSON.stringify(users));
     }
 
-    const hydratedUser = deepHydrate(user);
+    const hydratedUser = normalizeAccountDefaults(deepHydrate(user));
+    const userIdx = users.findIndex(u => u.id === hydratedUser.id);
+    if (userIdx >= 0) {
+      users[userIdx] = hydratedUser;
+      localStorage.setItem(DB_KEY_USERS, JSON.stringify(users));
+    }
     localStorage.setItem(DB_KEY_SESSION, JSON.stringify(hydratedUser));
     return hydratedUser;
   },
@@ -342,8 +375,9 @@ const localAuth = {
 
     users.push(newAccount);
     localStorage.setItem(DB_KEY_USERS, JSON.stringify(users));
-    localStorage.setItem(DB_KEY_SESSION, JSON.stringify(newAccount));
-    return deepHydrate(newAccount);
+    const normalizedAccount = normalizeAccountDefaults(newAccount);
+    localStorage.setItem(DB_KEY_SESSION, JSON.stringify(normalizedAccount));
+    return normalizedAccount;
   },
 
   logout: async () => {
@@ -355,7 +389,7 @@ const localAuth = {
     try {
       const saved = localStorage.getItem(DB_KEY_SESSION);
       if (!saved) return null;
-      return deepHydrate(JSON.parse(saved));
+      return normalizeAccountDefaults(deepHydrate(JSON.parse(saved)));
     } catch (e) {
       console.error('Session Retrieval Fault:', e);
       localStorage.removeItem(DB_KEY_SESSION);
@@ -388,7 +422,7 @@ const localUser = {
         localStorage.setItem(DB_KEY_SESSION, JSON.stringify(updatedUser));
       }
 
-      return deepHydrate(updatedUser);
+      return normalizeAccountDefaults(deepHydrate(updatedUser));
     } catch (err) {
       console.error('Profile update failed', err);
       throw err;
