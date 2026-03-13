@@ -5,6 +5,44 @@ import { TOOLS } from '../constants';
 import { DEFAULT_MODELS } from '../constants';
 import { UserProfile, NewsItem, AIProvider } from '../types';
 
+interface PuterAI {
+  chat: (prompt: string, options?: { model?: string; stream?: boolean }) => Promise<any>;
+}
+
+declare global {
+  interface Window {
+    puter?: {
+      ai?: PuterAI;
+    };
+  }
+}
+
+
+const MAX_PUTER_HISTORY_ITEMS = 20;
+
+const normalizeModelForProvider = (provider: AIProvider, model?: string): string => {
+  if (!model) return DEFAULT_MODELS[provider];
+
+  if (provider === 'puter') {
+    const puterModel = model.includes('/') ? model : `openai/${model}`;
+    return puterModel;
+  }
+
+  return model;
+};
+
+const getPuterTextDelta = (part: any): string => {
+  if (!part) return '';
+  if (typeof part === 'string') return part;
+  if (typeof part?.text === 'string') return part.text;
+  if (typeof part?.delta === 'string') return part.delta;
+  if (typeof part?.toString === 'function') {
+    const asText = part.toString();
+    return asText === '[object Object]' ? '' : asText;
+  }
+  return '';
+};
+
 /**
  * Hardened System Instruction with Anti-Jailbreak directives.
  */
@@ -133,7 +171,7 @@ export const sendMessageToAI = async (
   }
 
   const currentContent: Content = { role: 'user', parts: currentParts };
-  const resolvedModel = model || DEFAULT_MODELS[provider];
+  const resolvedModel = normalizeModelForProvider(provider, model);
   
   if (provider === 'gemini') {
       if (!process.env.GEMINI_API_KEY) throw new Error("CORE_NODE_OFFLINE");
@@ -325,6 +363,59 @@ export const sendMessageToAI = async (
 
       } catch (error: any) {
           console.error("OpenAI Error:", error);
+          throw error;
+      }
+
+  } else if (provider === 'puter') {
+      if (typeof window === 'undefined' || !window.puter?.ai?.chat) {
+        throw new Error('PUTER_SDK_NOT_AVAILABLE');
+      }
+
+      try {
+          const historyText = chatHistory
+              .slice(-MAX_PUTER_HISTORY_ITEMS)
+              .map(h => `${h.role === 'model' ? 'Assistant' : 'User'}: ${h.parts?.map(p => p.text).filter(Boolean).join(' ') || ''}`)
+              .join('\n');
+
+          const prompt = `${getSystemInstruction(profile)}
+
+Conversation History:
+${historyText || 'No previous history.'}
+
+User: ${message}`;
+
+          const response = await window.puter.ai.chat(prompt, {
+              model: resolvedModel,
+              stream: Boolean(onStream)
+          });
+
+          let fullText = '';
+
+          if (response && typeof response[Symbol.asyncIterator] === 'function') {
+            for await (const part of response) {
+              const delta = getPuterTextDelta(part);
+              if (delta) {
+                fullText += delta;
+                if (onStream) onStream(fullText, []);
+              }
+            }
+          } else {
+            const oneShot = getPuterTextDelta(response) || getPuterTextDelta(response?.message?.content);
+            fullText = oneShot;
+            if (onStream && fullText) onStream(fullText, []);
+          }
+
+          const finalResultText = fullText || 'Transmission complete.';
+
+          if (saveHistory) {
+              chatHistory.push(currentContent);
+              chatHistory.push({ role: 'model', parts: [{ text: finalResultText }] });
+          }
+
+          return { text: finalResultText, sources: [] };
+
+      } catch (error: any) {
+          console.error('Puter Error:', error);
           throw error;
       }
   } else if (provider === 'openrouter') {
