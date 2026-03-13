@@ -6,7 +6,10 @@ import { DEFAULT_MODELS } from '../constants';
 import { UserProfile, NewsItem, AIProvider } from '../types';
 
 interface PuterAI {
-  chat: (prompt: string, options?: { model?: string; stream?: boolean }) => Promise<any>;
+  chat: (
+    prompt: string | Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+    options?: { model?: string; stream?: boolean }
+  ) => Promise<any>;
 }
 
 declare global {
@@ -19,6 +22,7 @@ declare global {
 
 
 const MAX_PUTER_HISTORY_ITEMS = 20;
+const PUTER_SDK_WAIT_TIMEOUT_MS = 7000;
 
 const normalizeModelForProvider = (provider: AIProvider, model?: string): string => {
   if (!model) return DEFAULT_MODELS[provider];
@@ -36,11 +40,54 @@ const getPuterTextDelta = (part: any): string => {
   if (typeof part === 'string') return part;
   if (typeof part?.text === 'string') return part.text;
   if (typeof part?.delta === 'string') return part.delta;
+  if (typeof part?.content === 'string') return part.content;
+  if (Array.isArray(part?.content)) {
+    return part.content.map((entry: any) => (typeof entry?.text === 'string' ? entry.text : '')).join('');
+  }
+  if (typeof part?.message?.content === 'string') return part.message.content;
+  if (Array.isArray(part?.message?.content)) {
+    return part.message.content.map((entry: any) => (typeof entry?.text === 'string' ? entry.text : '')).join('');
+  }
   if (typeof part?.toString === 'function') {
     const asText = part.toString();
     return asText === '[object Object]' ? '' : asText;
   }
   return '';
+};
+
+const waitForPuterSdk = async (timeoutMs = PUTER_SDK_WAIT_TIMEOUT_MS): Promise<PuterAI | null> => {
+  if (typeof window === 'undefined') return null;
+
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const puterAI = window.puter?.ai;
+    if (puterAI?.chat) {
+      return puterAI;
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  return window.puter?.ai?.chat ? window.puter.ai : null;
+};
+
+const buildPuterMessages = (message: string, profile?: UserProfile): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> => {
+  const historyMessages = chatHistory
+    .slice(-MAX_PUTER_HISTORY_ITEMS)
+    .map(h => {
+      const content = h.parts?.map(p => p.text).filter(Boolean).join(' ').trim() || '';
+      if (!content) return null;
+      return {
+        role: h.role === 'model' ? 'assistant' as const : 'user' as const,
+        content
+      };
+    })
+    .filter(Boolean) as Array<{ role: 'user' | 'assistant'; content: string }>;
+
+  return [
+    { role: 'system', content: getSystemInstruction(profile) },
+    ...historyMessages,
+    { role: 'user', content: message }
+  ];
 };
 
 /**
@@ -367,27 +414,27 @@ export const sendMessageToAI = async (
       }
 
   } else if (provider === 'puter') {
-      if (typeof window === 'undefined' || !window.puter?.ai?.chat) {
+      const puterAI = await waitForPuterSdk();
+      if (!puterAI?.chat) {
         throw new Error('PUTER_SDK_NOT_AVAILABLE');
       }
 
       try {
-          const historyText = chatHistory
-              .slice(-MAX_PUTER_HISTORY_ITEMS)
-              .map(h => `${h.role === 'model' ? 'Assistant' : 'User'}: ${h.parts?.map(p => p.text).filter(Boolean).join(' ') || ''}`)
-              .join('\n');
+          const puterMessages = buildPuterMessages(message, profile);
+          let response: any;
 
-          const prompt = `${getSystemInstruction(profile)}
-
-Conversation History:
-${historyText || 'No previous history.'}
-
-User: ${message}`;
-
-          const response = await window.puter.ai.chat(prompt, {
+          try {
+            response = await puterAI.chat(puterMessages, {
               model: resolvedModel,
               stream: Boolean(onStream)
-          });
+            });
+          } catch {
+            const promptFallback = `${getSystemInstruction(profile)}\n\nUser: ${message}`;
+            response = await puterAI.chat(promptFallback, {
+              model: resolvedModel,
+              stream: Boolean(onStream)
+            });
+          }
 
           let fullText = '';
 
