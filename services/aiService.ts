@@ -234,7 +234,7 @@ export const sendMessageToAI = async (
   onStream?: (text: string, sources?: {uri: string, title: string}[]) => void,
   attachments?: { data: string, mimeType: string }[],
   saveHistory: boolean = true,
-  provider: AIProvider = 'gemini',
+  provider: AIProvider = 'puter',
   model?: string
 ): Promise<{text: string, sources: {uri: string, title: string}[]}> => {
   
