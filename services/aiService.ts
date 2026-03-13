@@ -6,19 +6,31 @@ import { DEFAULT_MODELS } from '../constants';
 import { UserProfile, NewsItem, AIProvider } from '../types';
 
 interface PuterAI {
-  chat: (prompt: string, options?: { model?: string; stream?: boolean }) => Promise<any>;
+  chat: (
+    prompt: string | Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+    options?: { model?: string; stream?: boolean }
+  ) => Promise<any>;
+}
+
+interface PuterAuth {
+  isSignedIn?: () => boolean | Promise<boolean>;
+  signIn?: () => Promise<any>;
 }
 
 declare global {
   interface Window {
     puter?: {
       ai?: PuterAI;
+      auth?: PuterAuth;
     };
   }
 }
 
 
 const MAX_PUTER_HISTORY_ITEMS = 20;
+const PUTER_SDK_WAIT_TIMEOUT_MS = 20000;
+const OPENROUTER_FREE_MODEL = 'meta-llama/llama-3.1-8b-instruct:free';
+const OPENROUTER_FREE_API_KEY = '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';
 
 const normalizeModelForProvider = (provider: AIProvider, model?: string): string => {
   if (!model) return DEFAULT_MODELS[provider];
@@ -36,11 +48,89 @@ const getPuterTextDelta = (part: any): string => {
   if (typeof part === 'string') return part;
   if (typeof part?.text === 'string') return part.text;
   if (typeof part?.delta === 'string') return part.delta;
+  if (typeof part?.content === 'string') return part.content;
+  if (Array.isArray(part?.content)) {
+    return part.content.map((entry: any) => (typeof entry?.text === 'string' ? entry.text : '')).join('');
+  }
+  if (typeof part?.message?.content === 'string') return part.message.content;
+  if (Array.isArray(part?.message?.content)) {
+    return part.message.content.map((entry: any) => (typeof entry?.text === 'string' ? entry.text : '')).join('');
+  }
   if (typeof part?.toString === 'function') {
     const asText = part.toString();
     return asText === '[object Object]' ? '' : asText;
   }
   return '';
+};
+
+const waitForPuterSdk = async (timeoutMs = PUTER_SDK_WAIT_TIMEOUT_MS): Promise<PuterAI | null> => {
+  if (typeof window === 'undefined') return null;
+
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const puterAI = window.puter?.ai;
+    if (puterAI?.chat) {
+      return puterAI;
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  return window.puter?.ai?.chat ? window.puter.ai : null;
+};
+
+
+const ensurePuterAuth = async (): Promise<void> => {
+  if (typeof window === 'undefined') throw new Error('PUTER_SDK_NOT_AVAILABLE');
+
+  const puterAuth = window.puter?.auth;
+  if (!puterAuth) return;
+
+  const hasIsSignedIn = typeof puterAuth.isSignedIn === 'function';
+  const hasSignIn = typeof puterAuth.signIn === 'function';
+
+  if (!hasIsSignedIn && !hasSignIn) return;
+
+  const signedIn = hasIsSignedIn ? await Promise.resolve(puterAuth.isSignedIn?.()) : undefined;
+  if (signedIn) return;
+
+  if (!hasSignIn) {
+    return;
+  }
+
+  const signIn = puterAuth.signIn!;
+  try {
+    await signIn();
+  } catch (authError) {
+    console.warn('Puter sign-in prompt could not be completed automatically.', authError);
+    return;
+  }
+
+  if (hasIsSignedIn) {
+    const signedInAfter = await Promise.resolve(puterAuth.isSignedIn?.());
+    if (!signedInAfter) {
+      console.warn('Puter sign-in did not complete in current context. Proceeding with chat request.');
+    }
+  }
+};
+
+const buildPuterMessages = (message: string, profile?: UserProfile): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> => {
+  const historyMessages = chatHistory
+    .slice(-MAX_PUTER_HISTORY_ITEMS)
+    .map(h => {
+      const content = h.parts?.map(p => p.text).filter(Boolean).join(' ').trim() || '';
+      if (!content) return null;
+      return {
+        role: h.role === 'model' ? 'assistant' as const : 'user' as const,
+        content
+      };
+    })
+    .filter(Boolean) as Array<{ role: 'user' | 'assistant'; content: string }>;
+
+  return [
+    { role: 'system', content: getSystemInstruction(profile) },
+    ...historyMessages,
+    { role: 'user', content: message }
+  ];
 };
 
 /**
@@ -159,7 +249,7 @@ export const sendMessageToAI = async (
   onStream?: (text: string, sources?: {uri: string, title: string}[]) => void,
   attachments?: { data: string, mimeType: string }[],
   saveHistory: boolean = true,
-  provider: AIProvider = 'gemini',
+  provider: AIProvider = 'puter',
   model?: string
 ): Promise<{text: string, sources: {uri: string, title: string}[]}> => {
   
@@ -367,27 +457,28 @@ export const sendMessageToAI = async (
       }
 
   } else if (provider === 'puter') {
-      if (typeof window === 'undefined' || !window.puter?.ai?.chat) {
+      const puterAI = await waitForPuterSdk();
+      if (!puterAI?.chat) {
         throw new Error('PUTER_SDK_NOT_AVAILABLE');
       }
 
       try {
-          const historyText = chatHistory
-              .slice(-MAX_PUTER_HISTORY_ITEMS)
-              .map(h => `${h.role === 'model' ? 'Assistant' : 'User'}: ${h.parts?.map(p => p.text).filter(Boolean).join(' ') || ''}`)
-              .join('\n');
+          await ensurePuterAuth();
+          const puterMessages = buildPuterMessages(message, profile);
+          let response: any;
 
-          const prompt = `${getSystemInstruction(profile)}
-
-Conversation History:
-${historyText || 'No previous history.'}
-
-User: ${message}`;
-
-          const response = await window.puter.ai.chat(prompt, {
+          try {
+            response = await puterAI.chat(puterMessages, {
               model: resolvedModel,
               stream: Boolean(onStream)
-          });
+            });
+          } catch {
+            const promptFallback = `${getSystemInstruction(profile)}\n\nUser: ${message}`;
+            response = await puterAI.chat(promptFallback, {
+              model: resolvedModel,
+              stream: Boolean(onStream)
+            });
+          }
 
           let fullText = '';
 
@@ -416,12 +507,36 @@ User: ${message}`;
 
       } catch (error: any) {
           console.error('Puter Error:', error);
+
+          const puterErrorCode = String(error?.message || '');
+          const shouldFallbackToGemini = (
+            puterErrorCode.includes('PUTER_')
+            || puterErrorCode.toUpperCase().includes('PUTER')
+            || puterErrorCode.toLowerCase().includes('network')
+          );
+
+          if (shouldFallbackToGemini && process.env.GEMINI_API_KEY) {
+            console.warn('Puter unavailable, falling back to Gemini for this request.');
+            return sendMessageToAI(
+              message,
+              onToolCall,
+              onDraftCall,
+              profile,
+              onStream,
+              attachments,
+              saveHistory,
+              'gemini',
+              DEFAULT_MODELS.gemini
+            );
+          }
+
           throw error;
       }
   } else if (provider === 'openrouter') {
-      if (!process.env.OPENROUTER_API_KEY) throw new Error("OPENROUTER_NODE_OFFLINE");
+      const openrouterApiKey = process.env.OPENROUTER_API_KEY || OPENROUTER_FREE_API_KEY;
+      if (!openrouterApiKey) throw new Error("OPENROUTER_NODE_OFFLINE");
       const openrouter = new OpenAI({
-          apiKey: process.env.OPENROUTER_API_KEY,
+          apiKey: openrouterApiKey,
           baseURL: 'https://openrouter.ai/api/v1',
           defaultHeaders: {
             'HTTP-Referer': 'https://personal-ca.local',
@@ -541,6 +656,23 @@ User: ${message}`;
 
       } catch (error: any) {
           console.error("OpenRouter Error:", error);
+          const openrouterError = String(error?.message || '');
+          const isQuotaOrPaymentIssue = /402|insufficient|quota|credits|payment|required/i.test(openrouterError);
+
+          if (isQuotaOrPaymentIssue && resolvedModel !== OPENROUTER_FREE_MODEL) {
+            return sendMessageToAI(
+              message,
+              onToolCall,
+              onDraftCall,
+              profile,
+              onStream,
+              attachments,
+              saveHistory,
+              'openrouter',
+              OPENROUTER_FREE_MODEL
+            );
+          }
+
           throw error;
       }
   } else if (provider === 'anthropic') {
