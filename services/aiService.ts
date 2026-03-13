@@ -92,16 +92,21 @@ const ensurePuterAuth = async (): Promise<void> => {
   if (signedIn) return;
 
   if (!hasSignIn) {
-    throw new Error('PUTER_AUTH_UNAVAILABLE');
+    return;
   }
 
   const signIn = puterAuth.signIn!;
-  await signIn();
+  try {
+    await signIn();
+  } catch (authError) {
+    console.warn('Puter sign-in prompt could not be completed automatically.', authError);
+    return;
+  }
 
   if (hasIsSignedIn) {
     const signedInAfter = await Promise.resolve(puterAuth.isSignedIn?.());
     if (!signedInAfter) {
-      throw new Error('PUTER_AUTH_REQUIRED');
+      console.warn('Puter sign-in did not complete in current context. Proceeding with chat request.');
     }
   }
 };
