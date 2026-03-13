@@ -224,6 +224,8 @@ export const AI_MODELS: AIModelConfig[] = [
   { id: 'anthropic/claude-sonnet-4', name: 'Puter Claude Sonnet 4', provider: 'puter', description: 'Puter.js routed Anthropic Sonnet 4' },
 ];
 
+export const AUTO_MODEL_ID = 'auto';
+
 export const DEFAULT_MODELS: Record<AIProvider, string> = {
   gemini: 'gemini-2.5-flash',
   openai: 'gpt-5',

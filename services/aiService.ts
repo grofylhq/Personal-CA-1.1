@@ -2,7 +2,7 @@ import { GoogleGenAI, FunctionDeclaration, Type, GenerateContentResponse, Conten
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { TOOLS } from '../constants';
-import { DEFAULT_MODELS } from '../constants';
+import { AUTO_MODEL_ID, DEFAULT_MODELS } from '../constants';
 import { UserProfile, NewsItem, AIProvider } from '../types';
 
 interface PuterAI {
@@ -41,6 +41,39 @@ const normalizeModelForProvider = (provider: AIProvider, model?: string): string
   }
 
   return model;
+};
+
+
+const isProviderAvailable = async (provider: AIProvider): Promise<boolean> => {
+  if (provider === 'puter') {
+    const puterAI = await waitForPuterSdk(1200);
+    return Boolean(puterAI?.chat);
+  }
+
+  if (provider === 'openrouter') return Boolean(process.env.OPENROUTER_API_KEY || OPENROUTER_FREE_API_KEY);
+  if (provider === 'gemini') return Boolean(process.env.GEMINI_API_KEY);
+  if (provider === 'openai') return Boolean(process.env.OPENAI_API_KEY);
+  if (provider === 'anthropic') return Boolean(process.env.ANTHROPIC_API_KEY);
+  return false;
+};
+
+const resolveAutoProviderAndModel = async (
+  provider: AIProvider,
+  model?: string,
+): Promise<{ provider: AIProvider; model: string }> => {
+  if (model !== AUTO_MODEL_ID) {
+    return { provider, model: normalizeModelForProvider(provider, model) };
+  }
+
+  const providerPriority: AIProvider[] = ['puter', 'openrouter', 'gemini', 'openai', 'anthropic'];
+
+  for (const candidate of providerPriority) {
+    if (await isProviderAvailable(candidate)) {
+      return { provider: candidate, model: DEFAULT_MODELS[candidate] };
+    }
+  }
+
+  return { provider, model: normalizeModelForProvider(provider, undefined) };
 };
 
 const getPuterTextDelta = (part: any): string => {
@@ -261,9 +294,11 @@ export const sendMessageToAI = async (
   }
 
   const currentContent: Content = { role: 'user', parts: currentParts };
-  const resolvedModel = normalizeModelForProvider(provider, model);
+  const autoSelection = await resolveAutoProviderAndModel(provider, model);
+  const effectiveProvider = autoSelection.provider;
+  const resolvedModel = autoSelection.model;
   
-  if (provider === 'gemini') {
+  if (effectiveProvider === 'gemini') {
       if (!process.env.GEMINI_API_KEY) throw new Error("CORE_NODE_OFFLINE");
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -338,7 +373,7 @@ export const sendMessageToAI = async (
         console.error("Gemini Error:", error);
         throw error;
       }
-  } else if (provider === 'openai') {
+  } else if (effectiveProvider === 'openai') {
       if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_NODE_OFFLINE");
       const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, dangerouslyAllowBrowser: true });
 
@@ -456,7 +491,7 @@ export const sendMessageToAI = async (
           throw error;
       }
 
-  } else if (provider === 'puter') {
+  } else if (effectiveProvider === 'puter') {
       const puterAI = await waitForPuterSdk();
       if (!puterAI?.chat) {
         throw new Error('PUTER_SDK_NOT_AVAILABLE');
@@ -532,7 +567,7 @@ export const sendMessageToAI = async (
 
           throw error;
       }
-  } else if (provider === 'openrouter') {
+  } else if (effectiveProvider === 'openrouter') {
       const openrouterApiKey = process.env.OPENROUTER_API_KEY || OPENROUTER_FREE_API_KEY;
       if (!openrouterApiKey) throw new Error("OPENROUTER_NODE_OFFLINE");
       const openrouter = new OpenAI({
@@ -675,7 +710,7 @@ export const sendMessageToAI = async (
 
           throw error;
       }
-  } else if (provider === 'anthropic') {
+  } else if (effectiveProvider === 'anthropic') {
       if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_NODE_OFFLINE");
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, dangerouslyAllowBrowser: true });
 
