@@ -367,7 +367,7 @@ const App: React.FC = () => {
         `Convert this into a formal, high-precision financial query for a Senior CA: "${input}". 
         Be professional, include relevant Indian tax section if applicable. 
         Only return the refined query text.`,
-        () => {}, () => {}, currentUser?.profile, undefined, undefined, false, currentUser?.profile.preferredAIProvider || 'gemini', currentUser?.profile.preferredModel
+        () => {}, () => {}, currentUser?.profile, undefined, undefined, false, currentUser?.profile.preferredAIProvider || 'puter', currentUser?.profile.preferredModel
       );
       if (result.text) {
         const cleaned = result.text.replace(/^["'“”‘«]|["'“”’»]$/g, '').trim();
@@ -447,7 +447,7 @@ const App: React.FC = () => {
         },
         attachments,
         true,
-        nextProfile.preferredAIProvider || 'gemini',
+        nextProfile.preferredAIProvider || 'puter',
         nextProfile.preferredModel
       );
       
@@ -467,8 +467,17 @@ const App: React.FC = () => {
       });
       nextProfile.chatSessions = updatedHistorySessions;
       await updateProfile(nextProfile); 
-    } catch (error) {
-      setMessages(prev => prev.map(m => m.id === modelMsgId ? { ...m, content: "⚠️ System connection interrupted. The statutory engine is offline. Please check your network and retry.", isError: true } : m));
+    } catch (error: any) {
+      const errorCode = String(error?.message || '');
+      let errorMessage = "⚠️ System connection interrupted. The statutory engine is offline. Please check your network and retry.";
+
+      if (errorCode.includes('PUTER_AUTH_REQUIRED') || errorCode.includes('PUTER_AUTH_UNAVAILABLE')) {
+        errorMessage = "⚠️ Puter login is required. Please complete Puter authentication and retry.";
+      } else if (errorCode.includes('PUTER_SDK_NOT_AVAILABLE')) {
+        errorMessage = "⚠️ Puter SDK is unavailable right now. Refresh once and retry.";
+      }
+
+      setMessages(prev => prev.map(m => m.id === modelMsgId ? { ...m, content: errorMessage, isError: true } : m));
     } finally { 
       setIsLoading(false); 
       setIsStreaming(false); 

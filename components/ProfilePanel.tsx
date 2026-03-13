@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile, DocumentItem, AIProvider } from '../types';
-import { AI_MODELS, DEFAULT_MODELS } from '../constants';
+import { AI_MODELS, AUTO_MODEL_ID, DEFAULT_MODELS } from '../constants';
 import { 
   X, Wallet, TrendingUp, Shield, Save, 
   Sparkles, Building2, 
@@ -88,6 +88,14 @@ const ProfilePanel: React.FC<Props> = ({ isOpen, onClose, profile, onUpdate, the
 
   const removeDocument = (id: string) => {
     handleChange('documents', profile.documents.filter(d => d.id !== id));
+  };
+
+
+  const handleModelSelect = (provider: AIProvider, modelId: string) => {
+    const newProfile: UserProfile = JSON.parse(JSON.stringify(profile));
+    newProfile.preferredAIProvider = provider;
+    newProfile.preferredModel = modelId;
+    onUpdate(newProfile);
   };
 
   const handlePurge = () => {
@@ -436,10 +444,34 @@ const ProfilePanel: React.FC<Props> = ({ isOpen, onClose, profile, onUpdate, the
                              <Cpu size={14}/> AI Model
                            </h4>
                            <div className="space-y-3">
+                             {(() => {
+                               const selectedModel = profile.preferredModel || DEFAULT_MODELS[profile.preferredAIProvider || 'puter'];
+                               const isAutoSelected = selectedModel === AUTO_MODEL_ID;
+                               return (
+                                 <button
+                                   onClick={() => handleModelSelect(profile.preferredAIProvider || 'puter', AUTO_MODEL_ID)}
+                                   className={`w-full flex items-center justify-between p-3 rounded-xl transition-all text-left border ${
+                                     isAutoSelected
+                                       ? 'bg-brand-50 dark:bg-brand-900/20 border-brand-200 dark:border-brand-700 ring-1 ring-brand-500/20'
+                                       : 'hover:bg-white dark:hover:bg-white/5 border-slate-200 dark:border-white/10'
+                                   }`}
+                                 >
+                                   <div>
+                                     <p className={`text-sm font-bold ${isAutoSelected ? 'text-brand-700 dark:text-brand-300' : 'text-slate-900 dark:text-white'}`}>Auto (Best Available)</p>
+                                     <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Automatically picks the first available AI provider/model at runtime.</p>
+                                   </div>
+                                   {isAutoSelected && (
+                                     <div className="w-5 h-5 rounded-full bg-brand-500 flex items-center justify-center shrink-0">
+                                       <CheckCircle2 size={12} className="text-white" />
+                                     </div>
+                                   )}
+                                 </button>
+                               );
+                             })()}
                              {(['gemini', 'openai', 'anthropic', 'openrouter', 'puter'] as AIProvider[]).map(providerKey => {
                                const providerModels = AI_MODELS.filter(m => m.provider === providerKey);
                                const providerLabel = providerKey === 'gemini' ? 'Google Gemini' : providerKey === 'openai' ? 'OpenAI' : providerKey === 'anthropic' ? 'Anthropic Claude' : providerKey === 'openrouter' ? 'OpenRouter' : 'Puter.js';
-                               const selectedModel = profile.preferredModel || DEFAULT_MODELS[profile.preferredAIProvider || 'gemini'];
+                               const selectedModel = profile.preferredModel || DEFAULT_MODELS[profile.preferredAIProvider || 'puter'];
                                return (
                                  <div key={providerKey} className="bg-slate-50 dark:bg-white/[0.02] border border-slate-100 dark:border-white/5 rounded-2xl overflow-hidden">
                                    <div className="px-4 py-3 border-b border-slate-100 dark:border-white/5">
@@ -451,7 +483,7 @@ const ProfilePanel: React.FC<Props> = ({ isOpen, onClose, profile, onUpdate, the
                                        return (
                                          <button
                                            key={m.id}
-                                           onClick={() => { handleChange('preferredAIProvider', m.provider as string); handleChange('preferredModel', m.id); }}
+                                           onClick={() => handleModelSelect(m.provider, m.id)}
                                            className={`w-full flex items-center justify-between p-3 rounded-xl transition-all text-left ${
                                              isSelected
                                                ? 'bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-700 ring-1 ring-brand-500/20'

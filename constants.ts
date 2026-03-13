@@ -208,9 +208,9 @@ export const AI_MODELS: AIModelConfig[] = [
   { id: 'gpt-4.1', name: 'GPT-4.1', provider: 'openai', description: 'Reliable high-quality model' },
   { id: 'o4-mini', name: 'o4 Mini', provider: 'openai', description: 'Reasoning-focused OpenAI model' },
   // OpenRouter
-  { id: 'openai/gpt-4.1-mini', name: 'OpenRouter GPT-4.1 Mini', provider: 'openrouter', description: 'OpenRouter route to GPT-4.1 Mini' },
-  { id: 'anthropic/claude-3.5-sonnet', name: 'OpenRouter Claude 3.5 Sonnet', provider: 'openrouter', description: 'OpenRouter route to Claude Sonnet' },
-  { id: 'google/gemini-2.0-flash-001', name: 'OpenRouter Gemini 2.0 Flash', provider: 'openrouter', description: 'OpenRouter route to Gemini Flash' },
+  { id: 'meta-llama/llama-3.1-8b-instruct:free', name: 'OpenRouter Llama 3.1 8B (Free)', provider: 'openrouter', description: 'Free OpenRouter model for no-cost usage' },
+  { id: 'google/gemma-2-9b-it:free', name: 'OpenRouter Gemma 2 9B (Free)', provider: 'openrouter', description: 'Free OpenRouter Gemma route' },
+  { id: 'mistralai/mistral-7b-instruct:free', name: 'OpenRouter Mistral 7B (Free)', provider: 'openrouter', description: 'Free OpenRouter Mistral route' },
   // Anthropic Claude (latest)
   { id: 'claude-opus-4-1-20250805', name: 'Claude Opus 4.1', provider: 'anthropic', description: 'Most capable Claude model' },
   { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', provider: 'anthropic', description: 'Latest Sonnet generation' },
@@ -224,10 +224,12 @@ export const AI_MODELS: AIModelConfig[] = [
   { id: 'anthropic/claude-sonnet-4', name: 'Puter Claude Sonnet 4', provider: 'puter', description: 'Puter.js routed Anthropic Sonnet 4' },
 ];
 
+export const AUTO_MODEL_ID = 'auto';
+
 export const DEFAULT_MODELS: Record<AIProvider, string> = {
   gemini: 'gemini-2.5-flash',
   openai: 'gpt-5',
   anthropic: 'claude-opus-4-1-20250805',
-  openrouter: 'openai/gpt-4.1-mini',
+  openrouter: 'meta-llama/llama-3.1-8b-instruct:free',
   puter: 'openai/gpt-5',
 };
