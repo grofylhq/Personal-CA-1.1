@@ -225,6 +225,23 @@ const withRetry = async <T>(fn: () => Promise<T>, retries = 3, delay = 2000): Pr
   }
 };
 
+const getFallbackProvider = (): { provider: AIProvider; model: string } | null => {
+  if (process.env.GEMINI_API_KEY) return { provider: 'gemini', model: DEFAULT_MODELS.gemini };
+  if (process.env.OPENAI_API_KEY) return { provider: 'openai', model: DEFAULT_MODELS.openai };
+  if (process.env.OPENROUTER_API_KEY) return { provider: 'openrouter', model: DEFAULT_MODELS.openrouter };
+  if (process.env.ANTHROPIC_API_KEY) return { provider: 'anthropic', model: DEFAULT_MODELS.anthropic };
+  return null;
+};
+
+const getContinuityFallbackText = (message: string): string => {
+  const preview = message.trim().slice(0, 240);
+  return [
+    'I received your message, but the live AI provider is temporarily unavailable in this session.',
+    'Please retry once in a few seconds. Meanwhile, here is your captured request so your work is not lost:',
+    `> ${preview || 'No message content provided.'}`,
+  ].join('\n\n');
+};
+
 export const transcribeAudio = async (base64Audio: string, mimeType: string): Promise<string> => {
   if (!process.env.GEMINI_API_KEY) throw new Error("API_KEY_NODE_FAULT");
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -457,7 +474,19 @@ export const sendMessageToAI = async (
   } else if (provider === 'puter') {
       const puterAI = await waitForPuterSdk();
       if (!puterAI?.chat) {
-        throw new Error('PUTER_SDK_NOT_AVAILABLE');
+        const fallback = getFallbackProvider();
+        if (fallback) {
+          console.warn('Puter SDK unavailable, falling back to', fallback.provider);
+          return sendMessageToAI(message, onToolCall, onDraftCall, profile, onStream, attachments, saveHistory, fallback.provider, fallback.model);
+        }
+
+        const continuityText = getContinuityFallbackText(message);
+        if (saveHistory) {
+          chatHistory.push(currentContent);
+          chatHistory.push({ role: 'model', parts: [{ text: continuityText }] });
+        }
+        if (onStream) onStream(continuityText, []);
+        return { text: continuityText, sources: [] };
       }
 
       try {
@@ -471,7 +500,9 @@ export const sendMessageToAI = async (
               stream: Boolean(onStream)
             });
           } catch {
-            const promptFallback = `${getSystemInstruction(profile)}\n\nUser: ${message}`;
+            const promptFallback = `${getSystemInstruction(profile)}
+
+User: ${message}`;
             response = await puterAI.chat(promptFallback, {
               model: resolvedModel,
               stream: Boolean(onStream)
@@ -506,29 +537,19 @@ export const sendMessageToAI = async (
       } catch (error: any) {
           console.error('Puter Error:', error);
 
-          const puterErrorCode = String(error?.message || '');
-          const shouldFallbackToGemini = (
-            puterErrorCode.includes('PUTER_')
-            || puterErrorCode.toUpperCase().includes('PUTER')
-            || puterErrorCode.toLowerCase().includes('network')
-          );
-
-          if (shouldFallbackToGemini && process.env.GEMINI_API_KEY) {
-            console.warn('Puter unavailable, falling back to Gemini for this request.');
-            return sendMessageToAI(
-              message,
-              onToolCall,
-              onDraftCall,
-              profile,
-              onStream,
-              attachments,
-              saveHistory,
-              'gemini',
-              DEFAULT_MODELS.gemini
-            );
+          const fallback = getFallbackProvider();
+          if (fallback) {
+            console.warn('Puter request failed, falling back to', fallback.provider);
+            return sendMessageToAI(message, onToolCall, onDraftCall, profile, onStream, attachments, saveHistory, fallback.provider, fallback.model);
           }
 
-          throw error;
+          const continuityText = getContinuityFallbackText(message);
+          if (saveHistory) {
+            chatHistory.push(currentContent);
+            chatHistory.push({ role: 'model', parts: [{ text: continuityText }] });
+          }
+          if (onStream) onStream(continuityText, []);
+          return { text: continuityText, sources: [] };
       }
   } else if (provider === 'openrouter') {
       if (!process.env.OPENROUTER_API_KEY) throw new Error("OPENROUTER_NODE_OFFLINE");
