@@ -56,6 +56,20 @@ export const secureSanitize = (html: string): string => {
   });
 };
 
+
+const toSafeExternalUrl = (candidate: string): string => {
+  if (!candidate) return '#';
+  try {
+    const parsed = new URL(candidate, window.location.origin);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return parsed.href;
+    }
+  } catch {
+    // Fall through to safe fallback.
+  }
+  return '#';
+};
+
 const TypingText: React.FC<{ text: string; isStreaming: boolean; isLast: boolean }> = ({ text, isStreaming, isLast }) => {
   const [displayedText, setDisplayedText] = useState('');
   const intervalRef = useRef<number | null>(null);
@@ -726,7 +740,7 @@ const App: React.FC = () => {
                                           {msg.groundingSources && msg.groundingSources.length > 0 && (
                                             <div className="mt-6 pt-6 border-t border-slate-100 dark:border-white/5">
                                               <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5 mb-3"> <Shield size={10} className="text-brand-500" /> Statutory Sources </p>
-                                              <div className="flex flex-wrap gap-2"> {msg.groundingSources.map((source, sIdx) => ( <a key={sIdx} href={source.uri} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 hover:bg-brand-50 dark:hover:bg-white/5 border border-slate-100 dark:border-white/10 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-400 transition-all max-w-full truncate"> {source.title} </a> ))} </div>
+                                              <div className="flex flex-wrap gap-2"> {msg.groundingSources.map((source, sIdx) => ( <a key={sIdx} href={toSafeExternalUrl(source.uri)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 hover:bg-brand-50 dark:hover:bg-white/5 border border-slate-100 dark:border-white/10 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-400 transition-all max-w-full truncate"> {source.title} </a> ))} </div>
                                             </div>
                                           )}
                                        </div>

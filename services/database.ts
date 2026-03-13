@@ -247,16 +247,57 @@ const supabaseUser = {
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function hashPassword(password: string): Promise<string> {
-  // NOTE: This localStorage fallback uses a simple deterministic salt.
-  // In production, Supabase Auth handles password hashing with bcrypt.
-  // This is only used when SUPABASE_URL/SUPABASE_ANON_KEY are not configured.
+const LOCAL_KDF_ITERATIONS = 120_000;
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  if (!hex || hex.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(hex)) return new Uint8Array();
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    out[i / 2] = parseInt(hex.slice(i, i + 2), 16);
+  }
+  return out;
+}
+
+async function derivePasswordHash(password: string, saltHex: string, iterations = LOCAL_KDF_ITERATIONS): Promise<string> {
+  const encoder = new TextEncoder();
+  const passwordKey = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
+  const saltBytes = hexToBytes(saltHex);
+  const saltBuffer = new Uint8Array(saltBytes).buffer as ArrayBuffer;
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: saltBuffer, iterations },
+    passwordKey,
+    256,
+  );
+  return bytesToHex(new Uint8Array(bits));
+}
+
+async function createPasswordRecord(password: string): Promise<{ hash: string; salt: string; iterations: number }> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const saltHex = bytesToHex(salt);
+  const hash = await derivePasswordHash(password, saltHex, LOCAL_KDF_ITERATIONS);
+  return { hash, salt: saltHex, iterations: LOCAL_KDF_ITERATIONS };
+}
+
+async function hashPasswordLegacy(password: string): Promise<string> {
   const salt = 'pca_local_demo_salt_v2';
   const salted = password + salt;
   const msgBuffer = new TextEncoder().encode(salted);
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return bytesToHex(new Uint8Array(hashBuffer));
+}
+
+async function verifyPassword(user: UserAccount, candidatePassword: string): Promise<boolean> {
+  if (user.passwordSalt && user.passwordIterations) {
+    const derivedHash = await derivePasswordHash(candidatePassword, user.passwordSalt, user.passwordIterations);
+    return derivedHash === user.passwordHash;
+  }
+
+  const legacyHash = await hashPasswordLegacy(candidatePassword);
+  return legacyHash === user.passwordHash;
 }
 
 const localAuth = {
@@ -264,14 +305,28 @@ const localAuth = {
     await delay(600);
     const usersRaw = localStorage.getItem(DB_KEY_USERS);
     const users: UserAccount[] = usersRaw ? JSON.parse(usersRaw) : [];
-    const hashedPassword = await hashPassword(password);
+    const cleanEmail = email.toLowerCase().trim();
 
-    const user = users.find(
-      u => u.email.toLowerCase() === email.toLowerCase().trim() && u.passwordHash === hashedPassword
+    const userIndex = users.findIndex(
+      u => u.email.toLowerCase() === cleanEmail
     );
-    if (!user) throw new Error('Invalid Credentials / Identity Node Mismatch');
+    const user = userIndex >= 0 ? users[userIndex] : null;
+    if (!user || !(await verifyPassword(user, password))) {
+      throw new Error('Invalid Credentials / Identity Node Mismatch');
+    }
 
-    const hydratedUser = deepHydrate(user);
+    if (!user.passwordSalt || !user.passwordIterations) {
+      const upgradedPasswordRecord = await createPasswordRecord(password);
+      users[userIndex] = {
+        ...user,
+        passwordHash: upgradedPasswordRecord.hash,
+        passwordSalt: upgradedPasswordRecord.salt,
+        passwordIterations: upgradedPasswordRecord.iterations,
+      };
+      localStorage.setItem(DB_KEY_USERS, JSON.stringify(users));
+    }
+
+    const hydratedUser = deepHydrate(users[userIndex]);
     localStorage.setItem(DB_KEY_SESSION, JSON.stringify(hydratedUser));
     return hydratedUser;
   },
@@ -329,13 +384,15 @@ const localAuth = {
       throw new Error('Identity already exists in this node');
     }
 
-    const hashedPassword = await hashPassword(password);
+    const passwordRecord = await createPasswordRecord(password);
     const newProfile = createDefaultProfile(crypto.randomUUID(), cleanEmail, name.trim());
 
     const newAccount: UserAccount = {
       id: newProfile.id,
       email: cleanEmail,
-      passwordHash: hashedPassword,
+      passwordHash: passwordRecord.hash,
+      passwordSalt: passwordRecord.salt,
+      passwordIterations: passwordRecord.iterations,
       name: name.trim(),
       profile: newProfile,
     };
