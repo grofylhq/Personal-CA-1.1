@@ -467,8 +467,17 @@ const App: React.FC = () => {
       });
       nextProfile.chatSessions = updatedHistorySessions;
       await updateProfile(nextProfile); 
-    } catch (error) {
-      setMessages(prev => prev.map(m => m.id === modelMsgId ? { ...m, content: "⚠️ System connection interrupted. The statutory engine is offline. Please check your network and retry.", isError: true } : m));
+    } catch (error: any) {
+      const errorCode = String(error?.message || '');
+      let errorMessage = "⚠️ System connection interrupted. The statutory engine is offline. Please check your network and retry.";
+
+      if (errorCode.includes('PUTER_AUTH_REQUIRED') || errorCode.includes('PUTER_AUTH_UNAVAILABLE')) {
+        errorMessage = "⚠️ Puter login is required. Please complete Puter authentication and retry.";
+      } else if (errorCode.includes('PUTER_SDK_NOT_AVAILABLE')) {
+        errorMessage = "⚠️ Puter SDK is unavailable right now. Refresh once and retry.";
+      }
+
+      setMessages(prev => prev.map(m => m.id === modelMsgId ? { ...m, content: errorMessage, isError: true } : m));
     } finally { 
       setIsLoading(false); 
       setIsStreaming(false); 

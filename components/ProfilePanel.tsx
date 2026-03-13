@@ -90,6 +90,14 @@ const ProfilePanel: React.FC<Props> = ({ isOpen, onClose, profile, onUpdate, the
     handleChange('documents', profile.documents.filter(d => d.id !== id));
   };
 
+
+  const handleModelSelect = (provider: AIProvider, modelId: string) => {
+    const newProfile: UserProfile = JSON.parse(JSON.stringify(profile));
+    newProfile.preferredAIProvider = provider;
+    newProfile.preferredModel = modelId;
+    onUpdate(newProfile);
+  };
+
   const handlePurge = () => {
     if (confirm("CRITICAL: This will permanently wipe all local session logs and financial profile cache. Continue?")) {
       localStorage.clear();
@@ -451,7 +459,7 @@ const ProfilePanel: React.FC<Props> = ({ isOpen, onClose, profile, onUpdate, the
                                        return (
                                          <button
                                            key={m.id}
-                                           onClick={() => { handleChange('preferredAIProvider', m.provider as string); handleChange('preferredModel', m.id); }}
+                                           onClick={() => handleModelSelect(m.provider, m.id)}
                                            className={`w-full flex items-center justify-between p-3 rounded-xl transition-all text-left ${
                                              isSelected
                                                ? 'bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-700 ring-1 ring-brand-500/20'

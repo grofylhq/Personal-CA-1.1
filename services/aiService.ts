@@ -12,10 +12,16 @@ interface PuterAI {
   ) => Promise<any>;
 }
 
+interface PuterAuth {
+  isSignedIn?: () => boolean | Promise<boolean>;
+  signIn?: () => Promise<any>;
+}
+
 declare global {
   interface Window {
     puter?: {
       ai?: PuterAI;
+      auth?: PuterAuth;
     };
   }
 }
@@ -68,6 +74,28 @@ const waitForPuterSdk = async (timeoutMs = PUTER_SDK_WAIT_TIMEOUT_MS): Promise<P
   }
 
   return window.puter?.ai?.chat ? window.puter.ai : null;
+};
+
+
+const ensurePuterAuth = async (): Promise<void> => {
+  if (typeof window === 'undefined') throw new Error('PUTER_SDK_NOT_AVAILABLE');
+
+  const puterAuth = window.puter?.auth;
+  if (!puterAuth) return;
+
+  const signedIn = await Promise.resolve(puterAuth.isSignedIn?.());
+  if (signedIn) return;
+
+  if (!puterAuth.signIn) {
+    throw new Error('PUTER_AUTH_UNAVAILABLE');
+  }
+
+  await puterAuth.signIn();
+
+  const signedInAfter = await Promise.resolve(puterAuth.isSignedIn?.());
+  if (!signedInAfter) {
+    throw new Error('PUTER_AUTH_REQUIRED');
+  }
 };
 
 const buildPuterMessages = (message: string, profile?: UserProfile): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> => {
@@ -420,6 +448,7 @@ export const sendMessageToAI = async (
       }
 
       try {
+          await ensurePuterAuth();
           const puterMessages = buildPuterMessages(message, profile);
           let response: any;
 
