@@ -28,7 +28,7 @@ declare global {
 
 
 const MAX_PUTER_HISTORY_ITEMS = 20;
-const PUTER_SDK_WAIT_TIMEOUT_MS = 7000;
+const PUTER_SDK_WAIT_TIMEOUT_MS = 20000;
 
 const normalizeModelForProvider = (provider: AIProvider, model?: string): string => {
   if (!model) return DEFAULT_MODELS[provider];
@@ -83,18 +83,26 @@ const ensurePuterAuth = async (): Promise<void> => {
   const puterAuth = window.puter?.auth;
   if (!puterAuth) return;
 
-  const signedIn = await Promise.resolve(puterAuth.isSignedIn?.());
+  const hasIsSignedIn = typeof puterAuth.isSignedIn === 'function';
+  const hasSignIn = typeof puterAuth.signIn === 'function';
+
+  if (!hasIsSignedIn && !hasSignIn) return;
+
+  const signedIn = hasIsSignedIn ? await Promise.resolve(puterAuth.isSignedIn?.()) : undefined;
   if (signedIn) return;
 
-  if (!puterAuth.signIn) {
+  if (!hasSignIn) {
     throw new Error('PUTER_AUTH_UNAVAILABLE');
   }
 
-  await puterAuth.signIn();
+  const signIn = puterAuth.signIn!;
+  await signIn();
 
-  const signedInAfter = await Promise.resolve(puterAuth.isSignedIn?.());
-  if (!signedInAfter) {
-    throw new Error('PUTER_AUTH_REQUIRED');
+  if (hasIsSignedIn) {
+    const signedInAfter = await Promise.resolve(puterAuth.isSignedIn?.());
+    if (!signedInAfter) {
+      throw new Error('PUTER_AUTH_REQUIRED');
+    }
   }
 };
 
@@ -492,6 +500,29 @@ export const sendMessageToAI = async (
 
       } catch (error: any) {
           console.error('Puter Error:', error);
+
+          const puterErrorCode = String(error?.message || '');
+          const shouldFallbackToGemini = (
+            puterErrorCode.includes('PUTER_')
+            || puterErrorCode.toUpperCase().includes('PUTER')
+            || puterErrorCode.toLowerCase().includes('network')
+          );
+
+          if (shouldFallbackToGemini && process.env.GEMINI_API_KEY) {
+            console.warn('Puter unavailable, falling back to Gemini for this request.');
+            return sendMessageToAI(
+              message,
+              onToolCall,
+              onDraftCall,
+              profile,
+              onStream,
+              attachments,
+              saveHistory,
+              'gemini',
+              DEFAULT_MODELS.gemini
+            );
+          }
+
           throw error;
       }
   } else if (provider === 'openrouter') {
