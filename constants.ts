@@ -201,24 +201,33 @@ export const AI_MODELS: AIModelConfig[] = [
   // Google Gemini
   { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'gemini', description: 'Fast and efficient with Google Search' },
   { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'gemini', description: 'Most capable Gemini model' },
-  // OpenAI
-  { id: 'gpt-4.1', name: 'GPT-4.1', provider: 'openai', description: 'Latest flagship model' },
-  { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', provider: 'openai', description: 'Balanced performance and speed' },
-  { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', provider: 'openai', description: 'Fast and lightweight' },
-  { id: 'o3-mini', name: 'o3 Mini', provider: 'openai', description: 'Advanced reasoning model' },
+  // OpenAI (latest)
+  { id: 'gpt-5', name: 'GPT-5', provider: 'openai', description: 'Latest flagship model' },
+  { id: 'gpt-5-mini', name: 'GPT-5 Mini', provider: 'openai', description: 'Balanced quality and speed' },
+  { id: 'gpt-5-nano', name: 'GPT-5 Nano', provider: 'openai', description: 'Fastest lightweight GPT-5 model' },
+  { id: 'gpt-4.1', name: 'GPT-4.1', provider: 'openai', description: 'Reliable high-quality model' },
+  { id: 'o4-mini', name: 'o4 Mini', provider: 'openai', description: 'Reasoning-focused OpenAI model' },
   // OpenRouter
   { id: 'openai/gpt-4.1-mini', name: 'OpenRouter GPT-4.1 Mini', provider: 'openrouter', description: 'OpenRouter route to GPT-4.1 Mini' },
   { id: 'anthropic/claude-3.5-sonnet', name: 'OpenRouter Claude 3.5 Sonnet', provider: 'openrouter', description: 'OpenRouter route to Claude Sonnet' },
   { id: 'google/gemini-2.0-flash-001', name: 'OpenRouter Gemini 2.0 Flash', provider: 'openrouter', description: 'OpenRouter route to Gemini Flash' },
-  // Anthropic Claude
-  { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', provider: 'anthropic', description: 'Latest Claude model' },
+  // Anthropic Claude (latest)
+  { id: 'claude-opus-4-1-20250805', name: 'Claude Opus 4.1', provider: 'anthropic', description: 'Most capable Claude model' },
+  { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', provider: 'anthropic', description: 'Latest Sonnet generation' },
   { id: 'claude-3-7-sonnet-20250219', name: 'Claude 3.7 Sonnet', provider: 'anthropic', description: 'Enhanced intelligence' },
   { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', provider: 'anthropic', description: 'Fast and efficient' },
+  // Puter.js unified models (OpenAI + Anthropic)
+  { id: 'openai/gpt-5', name: 'Puter GPT-5', provider: 'puter', description: 'Puter.js routed OpenAI GPT-5' },
+  { id: 'openai/gpt-5-mini', name: 'Puter GPT-5 Mini', provider: 'puter', description: 'Puter.js routed OpenAI GPT-5 Mini' },
+  { id: 'openai/gpt-4.1', name: 'Puter GPT-4.1', provider: 'puter', description: 'Puter.js routed OpenAI GPT-4.1' },
+  { id: 'anthropic/claude-opus-4-1', name: 'Puter Claude Opus 4.1', provider: 'puter', description: 'Puter.js routed Anthropic Opus 4.1' },
+  { id: 'anthropic/claude-sonnet-4', name: 'Puter Claude Sonnet 4', provider: 'puter', description: 'Puter.js routed Anthropic Sonnet 4' },
 ];
 
 export const DEFAULT_MODELS: Record<AIProvider, string> = {
   gemini: 'gemini-2.5-flash',
-  openai: 'gpt-4.1',
-  anthropic: 'claude-sonnet-4-20250514',
+  openai: 'gpt-5',
+  anthropic: 'claude-opus-4-1-20250805',
   openrouter: 'openai/gpt-4.1-mini',
+  puter: 'openai/gpt-5',
 };

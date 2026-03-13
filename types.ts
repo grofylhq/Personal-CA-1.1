@@ -121,7 +121,7 @@ export interface NewsItem {
 
 export type AppView = 'chat' | 'dashboard';
 
-export type AIProvider = 'gemini' | 'openai' | 'anthropic' | 'openrouter';
+export type AIProvider = 'gemini' | 'openai' | 'anthropic' | 'openrouter' | 'puter';
 
 export interface AIModelConfig {
   id: string;
