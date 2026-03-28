@@ -1,12 +1,3 @@
-async function readRawBody(req) {
-  return await new Promise((resolve, reject) => {
-    const chunks = [];
-    req.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-    req.on('error', reject);
-  });
-}
-
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     res.setHeader('Allow', 'POST, OPTIONS');
@@ -30,7 +21,7 @@ export default async function handler(req, res) {
     } else if (req.body && typeof req.body === 'object') {
       body = JSON.stringify(req.body);
     } else {
-      body = await readRawBody(req);
+      body = '';
     }
 
     if (!body) {
@@ -39,6 +30,7 @@ export default async function handler(req, res) {
 
     const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
+      signal: AbortSignal.timeout(25000),
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
@@ -53,6 +45,9 @@ export default async function handler(req, res) {
     res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json');
     return res.send(text);
   } catch (error) {
+    if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+      return res.status(504).json({ error: 'OpenRouter request timed out after 25s.' });
+    }
     return res.status(502).json({
       error: 'OpenRouter upstream request failed',
       detail: error?.message || 'Unknown error',

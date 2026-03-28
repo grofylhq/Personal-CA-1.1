@@ -470,11 +470,14 @@ User: ${message}`;
             ]
           };
           const sendOpenRouter = async (payload: Record<string, unknown>) => {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 45000);
             const response = await fetch('/api/openrouter', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),
-            });
+              signal: controller.signal,
+            }).finally(() => clearTimeout(timeout));
             const responseText = await response.text();
             let parsed: any = null;
             try { parsed = responseText ? JSON.parse(responseText) : null; } catch {}
