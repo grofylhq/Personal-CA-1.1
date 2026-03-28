@@ -1,4 +1,13 @@
-export default async function handler(req: any, res: any) {
+async function readRawBody(req) {
+  return await new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+
+export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     res.setHeader('Allow', 'POST, OPTIONS');
     return res.status(204).end();
@@ -15,7 +24,18 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {});
+    let body;
+    if (typeof req.body === 'string') {
+      body = req.body;
+    } else if (req.body && typeof req.body === 'object') {
+      body = JSON.stringify(req.body);
+    } else {
+      body = await readRawBody(req);
+    }
+
+    if (!body) {
+      return res.status(400).json({ error: 'Request body is empty.' });
+    }
 
     const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -32,7 +52,10 @@ export default async function handler(req: any, res: any) {
     res.status(upstream.status);
     res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json');
     return res.send(text);
-  } catch (error: any) {
-    return res.status(502).json({ error: 'OpenRouter upstream request failed', detail: error?.message || 'Unknown error' });
+  } catch (error) {
+    return res.status(502).json({
+      error: 'OpenRouter upstream request failed',
+      detail: error?.message || 'Unknown error',
+    });
   }
 }
