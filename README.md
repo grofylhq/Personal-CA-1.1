@@ -1,10 +1,10 @@
 # Personal CA — AI Financial Assistant
 
-An advanced AI-powered financial, compliance, and business-intelligence assistant for entrepreneurs and finance teams in India. Built with React, TypeScript, and multiple AI providers.
+An advanced AI-powered financial, compliance, and business-intelligence assistant for entrepreneurs and finance teams in India. Built with React, TypeScript, and OpenRouter-powered models.
 
 ## Features
 
-- **Multi-Provider AI Chat** — Google Gemini, OpenAI GPT, and Anthropic Claude
+- **OpenRouter AI Chat (Default for All Users)** — Curated free-tier model set
 - **16 Financial Calculators** — GST, Income Tax, Capital Gains, SIP, NPS, FD, and more
 - **Document Drafting** — Legal, Tax, and Corporate document generation
 - **Real-time News** — AI-powered financial intelligence stream
@@ -21,13 +21,9 @@ An advanced AI-powered financial, compliance, and business-intelligence assistan
    npm install
    ```
 
-2. Create a `.env.local` file with your API keys:
+2. Create a `.env.local` file with your keys:
    ```env
-   GEMINI_API_KEY=your_gemini_api_key
-
-   # Optional: additional AI providers
-   OPENAI_API_KEY=your_openai_api_key
-   ANTHROPIC_API_KEY=your_anthropic_api_key
+   # Required for AI chat (used only in server-side Vite proxy, never exposed in client bundle)
    OPENROUTER_API_KEY=your_openrouter_api_key
 
    # Optional: Supabase backend (falls back to localStorage if not set)
@@ -41,6 +37,8 @@ An advanced AI-powered financial, compliance, and business-intelligence assistan
    ```bash
    npm run dev
    ```
+
+> Production note (Vercel): this repo includes `api/openrouter.js`, so deploy as a Vercel project (not static export) to enable server-side OpenRouter proxying.
 
 ## Supabase Setup (Production)
 
@@ -63,10 +61,7 @@ npm run preview    # Preview the production build
 
 | Variable | Required | Description |
 |---|---|---|
-| `GEMINI_API_KEY` | Yes | Google Gemini API key |
-| `OPENAI_API_KEY` | No | OpenAI API key (for GPT models) |
-| `ANTHROPIC_API_KEY` | No | Anthropic API key (for Claude models) |
-| `OPENROUTER_API_KEY` | No | OpenRouter API key (for OpenRouter-routed models) |
+| `OPENROUTER_API_KEY` | Yes | OpenRouter API key (injected by dev proxy only, hidden from browser code) |
 | `SUPABASE_URL` | No | Supabase project URL |
 | `SUPABASE_ANON_KEY` | No | Supabase anonymous key |
 | `SUPABASE_PUBLISHABLE_KEY` | No | Supabase publishable key (alias for anon key) |

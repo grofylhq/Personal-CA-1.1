@@ -7,13 +7,29 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.OPENAI_API_KEY': JSON.stringify(env.OPENAI_API_KEY),
-      'process.env.ANTHROPIC_API_KEY': JSON.stringify(env.ANTHROPIC_API_KEY),
-      'process.env.OPENROUTER_API_KEY': JSON.stringify(env.OPENROUTER_API_KEY),
       'process.env.SUPABASE_URL': JSON.stringify(env.SUPABASE_URL),
       'process.env.SUPABASE_ANON_KEY': JSON.stringify(env.SUPABASE_ANON_KEY),
       'process.env.SUPABASE_PUBLISHABLE_KEY': JSON.stringify(env.SUPABASE_PUBLISHABLE_KEY),
+    },
+    server: {
+      proxy: {
+        '/api/openrouter': {
+          target: 'https://openrouter.ai/api/v1/chat/completions',
+          changeOrigin: true,
+          rewrite: () => '',
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              const key = env.OPENROUTER_API_KEY;
+              if (key) {
+                proxyReq.setHeader('Authorization', `Bearer ${key}`);
+              }
+              proxyReq.setHeader('Content-Type', 'application/json');
+              proxyReq.setHeader('HTTP-Referer', 'https://personal-ca.local');
+              proxyReq.setHeader('X-Title', 'Personal CA');
+            });
+          },
+        },
+      },
     },
     build: {
       outDir: 'dist',
