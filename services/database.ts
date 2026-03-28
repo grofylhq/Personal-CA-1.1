@@ -5,6 +5,13 @@ import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient';
 // ─── Local-storage keys (fallback when Supabase is not configured) ───────────
 const DB_KEY_USERS = 'pca_users';
 const DB_KEY_SESSION = 'pca_current_user';
+const ALLOWED_OPENROUTER_MODELS = new Set([
+  'nvidia/nemotron-3-super-120b-a12b:free',
+  'openai/gpt-oss-120b:free',
+  'google/gemma-3-27b-it:free',
+  'qwen/qwen3-next-80b-a3b-instruct:free',
+]);
+const DEFAULT_OPENROUTER_MODEL = 'openai/gpt-oss-120b:free';
 
 /**
  * Hardened utility to recursively restore Date objects and ensure data integrity.
@@ -62,7 +69,20 @@ function createDefaultProfile(
     currentSessionId: null,
     memoryBank: '',
     subscription: { tier: 'free', messageCount: 0 },
+    preferredAIProvider: 'openrouter',
+    preferredModel: DEFAULT_OPENROUTER_MODEL,
     ...extra,
+  };
+}
+
+function enforceAIProfileDefaults(profile: UserProfile): UserProfile {
+  const nextModel = ALLOWED_OPENROUTER_MODELS.has(profile.preferredModel || '')
+    ? profile.preferredModel!
+    : DEFAULT_OPENROUTER_MODEL;
+  return {
+    ...profile,
+    preferredAIProvider: 'openrouter',
+    preferredModel: nextModel,
   };
 }
 
@@ -77,7 +97,7 @@ const supabaseAuth = {
     });
     if (error || !data.user) throw new Error(error?.message ?? 'Authentication failed');
 
-    const profile = await supabaseUser.fetchProfile(data.user.id);
+    const profile = enforceAIProfileDefaults(await supabaseUser.fetchProfile(data.user.id));
     return {
       id: data.user.id,
       email: data.user.email ?? email,
@@ -99,13 +119,13 @@ const supabaseAuth = {
     const { data: { session } } = await sb.auth.getSession();
     if (!session?.user) throw new Error('Google sign-in did not complete');
 
-    const profile = await supabaseUser.ensureProfile(
+    const profile = enforceAIProfileDefaults(await supabaseUser.ensureProfile(
       session.user.id,
       session.user.email ?? '',
       session.user.user_metadata?.full_name ?? 'Google User',
       session.user.user_metadata?.avatar_url ?? '',
       true,
-    );
+    ));
 
     return {
       id: session.user.id,
@@ -127,11 +147,11 @@ const supabaseAuth = {
     if (error) throw new Error(error.message);
     if (!data.user) throw new Error('Registration failed');
 
-    const profile = await supabaseUser.ensureProfile(
+    const profile = enforceAIProfileDefaults(await supabaseUser.ensureProfile(
       data.user.id,
       cleanEmail,
       name.trim(),
-    );
+    ));
 
     return {
       id: data.user.id,
@@ -171,7 +191,7 @@ const supabaseUser = {
       .eq('id', userId)
       .single();
     if (error || !data) throw new Error('Profile not found');
-    return deepHydrate(data) as UserProfile;
+    return enforceAIProfileDefaults(deepHydrate(data) as UserProfile);
   },
 
   /** Upsert a profile – used after first sign-in / registration. */
@@ -191,7 +211,7 @@ const supabaseUser = {
       .eq('id', userId)
       .single();
 
-    if (existing) return deepHydrate(existing) as UserProfile;
+    if (existing) return enforceAIProfileDefaults(deepHydrate(existing) as UserProfile);
 
     const newProfile = createDefaultProfile(userId, email, name, {
       avatarUrl,
@@ -205,7 +225,7 @@ const supabaseUser = {
       .select()
       .single();
     if (error || !data) throw new Error(error?.message ?? 'Failed to create profile');
-    return deepHydrate(data) as UserProfile;
+    return enforceAIProfileDefaults(deepHydrate(data) as UserProfile);
   },
 
   updateProfile: async (accountId: string, updates: Partial<UserProfile>): Promise<UserAccount> => {
@@ -218,7 +238,7 @@ const supabaseUser = {
       .single();
     if (error || !data) throw new Error(error?.message ?? 'Profile update failed');
 
-    const profile = deepHydrate(data) as UserProfile;
+    const profile = enforceAIProfileDefaults(deepHydrate(data) as UserProfile);
     const account: UserAccount = {
       id: accountId,
       email: profile.email,
@@ -272,6 +292,7 @@ const localAuth = {
     if (!user) throw new Error('Invalid Credentials / Identity Node Mismatch');
 
     const hydratedUser = deepHydrate(user);
+    hydratedUser.profile = enforceAIProfileDefaults(hydratedUser.profile);
     localStorage.setItem(DB_KEY_SESSION, JSON.stringify(hydratedUser));
     return hydratedUser;
   },
@@ -315,6 +336,7 @@ const localAuth = {
     }
 
     const hydratedUser = deepHydrate(user);
+    hydratedUser.profile = enforceAIProfileDefaults(hydratedUser.profile);
     localStorage.setItem(DB_KEY_SESSION, JSON.stringify(hydratedUser));
     return hydratedUser;
   },
@@ -343,7 +365,10 @@ const localAuth = {
     users.push(newAccount);
     localStorage.setItem(DB_KEY_USERS, JSON.stringify(users));
     localStorage.setItem(DB_KEY_SESSION, JSON.stringify(newAccount));
-    return deepHydrate(newAccount);
+    const hydratedAccount = deepHydrate(newAccount);
+    hydratedAccount.profile = enforceAIProfileDefaults(hydratedAccount.profile);
+    localStorage.setItem(DB_KEY_SESSION, JSON.stringify(hydratedAccount));
+    return hydratedAccount;
   },
 
   logout: async () => {
@@ -355,7 +380,9 @@ const localAuth = {
     try {
       const saved = localStorage.getItem(DB_KEY_SESSION);
       if (!saved) return null;
-      return deepHydrate(JSON.parse(saved));
+      const session = deepHydrate(JSON.parse(saved));
+      session.profile = enforceAIProfileDefaults(session.profile);
+      return session;
     } catch (e) {
       console.error('Session Retrieval Fault:', e);
       localStorage.removeItem(DB_KEY_SESSION);
@@ -373,7 +400,7 @@ const localUser = {
       if (idx === -1) throw new Error('Data Sync Fault');
 
       const existingProfile = users[idx].profile;
-      const updatedProfile = { ...existingProfile, ...updates };
+      const updatedProfile = enforceAIProfileDefaults({ ...existingProfile, ...updates } as UserProfile);
       const updatedUser = {
         ...users[idx],
         profile: updatedProfile,

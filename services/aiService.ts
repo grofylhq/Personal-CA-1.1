@@ -19,6 +19,7 @@ declare global {
 
 
 const MAX_PUTER_HISTORY_ITEMS = 20;
+const getDefaultProvider = (): AIProvider => 'openrouter';
 
 const normalizeModelForProvider = (provider: AIProvider, model?: string): string => {
   if (!model) return DEFAULT_MODELS[provider];
@@ -159,7 +160,7 @@ export const sendMessageToAI = async (
   onStream?: (text: string, sources?: {uri: string, title: string}[]) => void,
   attachments?: { data: string, mimeType: string }[],
   saveHistory: boolean = true,
-  provider: AIProvider = 'gemini',
+  provider: AIProvider = 'openrouter',
   model?: string
 ): Promise<{text: string, sources: {uri: string, title: string}[]}> => {
   
@@ -171,9 +172,10 @@ export const sendMessageToAI = async (
   }
 
   const currentContent: Content = { role: 'user', parts: currentParts };
-  const resolvedModel = normalizeModelForProvider(provider, model);
+  const enforcedProvider: AIProvider = getDefaultProvider();
+  const resolvedModel = normalizeModelForProvider(enforcedProvider, model);
   
-  if (provider === 'gemini') {
+  if (enforcedProvider === 'gemini') {
       if (!process.env.GEMINI_API_KEY) throw new Error("CORE_NODE_OFFLINE");
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -248,7 +250,7 @@ export const sendMessageToAI = async (
         console.error("Gemini Error:", error);
         throw error;
       }
-  } else if (provider === 'openai') {
+  } else if (enforcedProvider === 'openai') {
       if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_NODE_OFFLINE");
       const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, dangerouslyAllowBrowser: true });
 
@@ -366,7 +368,7 @@ export const sendMessageToAI = async (
           throw error;
       }
 
-  } else if (provider === 'puter') {
+  } else if (enforcedProvider === 'puter') {
       if (typeof window === 'undefined' || !window.puter?.ai?.chat) {
         throw new Error('PUTER_SDK_NOT_AVAILABLE');
       }
@@ -418,18 +420,7 @@ User: ${message}`;
           console.error('Puter Error:', error);
           throw error;
       }
-  } else if (provider === 'openrouter') {
-      if (!process.env.OPENROUTER_API_KEY) throw new Error("OPENROUTER_NODE_OFFLINE");
-      const openrouter = new OpenAI({
-          apiKey: process.env.OPENROUTER_API_KEY,
-          baseURL: 'https://openrouter.ai/api/v1',
-          defaultHeaders: {
-            'HTTP-Referer': 'https://personal-ca.local',
-            'X-Title': 'Personal CA'
-          },
-          dangerouslyAllowBrowser: true
-      });
-
+  } else if (enforcedProvider === 'openrouter') {
       try {
           const messages: any[] = [
               { role: 'system', content: getSystemInstruction(profile) },
@@ -440,110 +431,134 @@ User: ${message}`;
               { role: 'user', content: message }
           ];
 
-          const stream = await openrouter.chat.completions.create({
-              model: resolvedModel,
-              messages: messages,
-              stream: true,
-              tools: [
-                  {
-                      type: 'function',
-                      function: {
-                          name: 'activate_tool',
-                          description: 'Initializes a specific statutory calculator or financial module.',
-                          parameters: {
-                              type: 'object',
-                              properties: {
-                                  toolId: { type: 'string', enum: TOOLS.map(t => t.id) },
-                                  initialData: { type: 'string', description: 'Prefill data as JSON string.' }
-                              },
-                              required: ['toolId']
-                          }
-                      }
-                  },
-                  {
-                      type: 'function',
-                      function: {
-                          name: 'draft_document',
-                          description: 'Generates a formal legal, tax, or corporate draft on the professional canvas.',
-                          parameters: {
-                              type: 'object',
-                              properties: {
-                                  title: { type: 'string', description: 'Formal title of the document.' },
-                                  content: { type: 'string', description: 'Complete document content in Markdown.' },
-                                  type: { type: 'string', enum: ['Legal', 'Tax', 'Corporate', 'Audit', 'Strategic'] }
-                              },
-                              required: ['title', 'content', 'type']
-                          }
-                      }
+          const payload = {
+            model: resolvedModel,
+            messages,
+            stream: true,
+            reasoning: { enabled: true },
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'activate_tool',
+                  description: 'Initializes a specific statutory calculator or financial module.',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      toolId: { type: 'string', enum: TOOLS.map(t => t.id) },
+                      initialData: { type: 'string', description: 'Prefill data as JSON string.' }
+                    },
+                    required: ['toolId']
                   }
-              ]
+                }
+              },
+              {
+                type: 'function',
+                function: {
+                  name: 'draft_document',
+                  description: 'Generates a formal legal, tax, or corporate draft on the professional canvas.',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      title: { type: 'string', description: 'Formal title of the document.' },
+                      content: { type: 'string', description: 'Complete document content in Markdown.' },
+                      type: { type: 'string', enum: ['Legal', 'Tax', 'Corporate', 'Audit', 'Strategic'] }
+                    },
+                    required: ['title', 'content', 'type']
+                  }
+                }
+              }
+            ]
+          };
+
+          const response = await fetch('/api/openrouter/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
           });
 
+          if (!response.ok || !response.body) {
+            throw new Error(`OPENROUTER_PROXY_ERROR_${response.status}`);
+          }
+
+          const decoder = new TextDecoder();
+          const reader = response.body.getReader();
           let fullText = '';
           let toolCalls: any[] = [];
           let currentToolCall: any = null;
+          let buffer = '';
 
-          for await (const chunk of stream) {
-              const delta = chunk.choices[0]?.delta;
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed.startsWith('data:')) continue;
+              const data = trimmed.slice(5).trim();
+              if (!data || data === '[DONE]') continue;
+
+              let json: any = null;
+              try { json = JSON.parse(data); } catch { continue; }
+              const delta = json?.choices?.[0]?.delta;
+
               if (delta?.content) {
-                  fullText += delta.content;
-                  if (onStream) onStream(fullText, []);
+                fullText += delta.content;
+                if (onStream) onStream(fullText, []);
               }
 
               if (delta?.tool_calls) {
-                  for (const toolCall of delta.tool_calls) {
-                      if (toolCall.id) {
-                          if (currentToolCall) {
-                              toolCalls.push(currentToolCall);
-                          }
-                          currentToolCall = {
-                              id: toolCall.id,
-                              type: 'function',
-                              function: {
-                                  name: toolCall.function?.name || '',
-                                  arguments: toolCall.function?.arguments || ''
-                              }
-                          };
-                      } else if (currentToolCall && toolCall.function?.arguments) {
-                          currentToolCall.function.arguments += toolCall.function.arguments;
+                for (const toolCall of delta.tool_calls) {
+                  if (toolCall.id) {
+                    if (currentToolCall) toolCalls.push(currentToolCall);
+                    currentToolCall = {
+                      id: toolCall.id,
+                      type: 'function',
+                      function: {
+                        name: toolCall.function?.name || '',
+                        arguments: toolCall.function?.arguments || ''
                       }
+                    };
+                  } else if (currentToolCall && toolCall.function?.arguments) {
+                    currentToolCall.function.arguments += toolCall.function.arguments;
                   }
+                }
               }
-          }
-          if (currentToolCall) {
-              toolCalls.push(currentToolCall);
+            }
           }
 
-          if (toolCalls.length > 0) {
-              for (const call of toolCalls) {
-                  if (call.function.name === 'activate_tool') {
-                      let args: any = {};
-                      try { args = JSON.parse(call.function.arguments); } catch(e) {}
-                      let initialData = {};
-                      try { if(args.initialData) initialData = JSON.parse(args.initialData); } catch(e) {}
-                      onToolCall(args.toolId, initialData);
-                  } else if (call.function.name === 'draft_document') {
-                      let args: any = {};
-                      try { args = JSON.parse(call.function.arguments); } catch(e) {}
-                      onDraftCall(args.title, args.content, args.type);
-                  }
-              }
+          if (currentToolCall) toolCalls.push(currentToolCall);
+
+          for (const call of toolCalls) {
+            if (call.function.name === 'activate_tool') {
+              let args: any = {};
+              try { args = JSON.parse(call.function.arguments); } catch {}
+              let initialData = {};
+              try { if (args.initialData) initialData = JSON.parse(args.initialData); } catch {}
+              onToolCall(args.toolId, initialData);
+            } else if (call.function.name === 'draft_document') {
+              let args: any = {};
+              try { args = JSON.parse(call.function.arguments); } catch {}
+              onDraftCall(args.title, args.content, args.type);
+            }
           }
 
           const finalResultText = fullText || (toolCalls.length > 0 ? "I've initialized the requested module for you." : "Transmission complete.");
 
           if (saveHistory) {
-              chatHistory.push(currentContent);
-              chatHistory.push({ role: 'model', parts: [{ text: finalResultText }] });
+            chatHistory.push(currentContent);
+            chatHistory.push({ role: 'model', parts: [{ text: finalResultText }] });
           }
 
           return { text: finalResultText, sources: [] };
-
       } catch (error: any) {
           console.error("OpenRouter Error:", error);
           throw error;
       }
-  } else if (provider === 'anthropic') {
+  } else if (enforcedProvider === 'anthropic') {
       if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_NODE_OFFLINE");
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, dangerouslyAllowBrowser: true });
 
