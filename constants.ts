@@ -205,9 +205,9 @@ export const AI_MODELS: AIModelConfig[] = [
 ];
 
 export const DEFAULT_MODELS: Record<AIProvider, string> = {
-  gemini: 'qwen/qwen3-next-80b-a3b-instruct:free',
-  openai: 'qwen/qwen3-next-80b-a3b-instruct:free',
-  anthropic: 'qwen/qwen3-next-80b-a3b-instruct:free',
-  openrouter: 'qwen/qwen3-next-80b-a3b-instruct:free',
-  puter: 'qwen/qwen3-next-80b-a3b-instruct:free',
+  gemini: 'nvidia/nemotron-3-super-120b-a12b:free',
+  openai: 'nvidia/nemotron-3-super-120b-a12b:free',
+  anthropic: 'nvidia/nemotron-3-super-120b-a12b:free',
+  openrouter: 'nvidia/nemotron-3-super-120b-a12b:free',
+  puter: 'nvidia/nemotron-3-super-120b-a12b:free',
 };

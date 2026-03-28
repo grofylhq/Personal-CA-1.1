@@ -11,7 +11,7 @@ const ALLOWED_OPENROUTER_MODELS = new Set([
   'google/gemma-3-27b-it:free',
   'qwen/qwen3-next-80b-a3b-instruct:free',
 ]);
-const DEFAULT_OPENROUTER_MODEL = 'qwen/qwen3-next-80b-a3b-instruct:free';
+const DEFAULT_OPENROUTER_MODEL = 'nvidia/nemotron-3-super-120b-a12b:free';
 
 /**
  * Hardened utility to recursively restore Date objects and ensure data integrity.
