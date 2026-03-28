@@ -434,7 +434,7 @@ User: ${message}`;
           const payload = {
             model: resolvedModel,
             messages,
-            stream: true,
+            stream: false,
             reasoning: { enabled: true },
             tools: [
               {
@@ -477,71 +477,26 @@ User: ${message}`;
             body: JSON.stringify(payload),
           });
 
-          if (!response.ok || !response.body) {
+          if (!response.ok) {
             throw new Error(`OPENROUTER_PROXY_ERROR_${response.status}`);
           }
+          const completion = await response.json();
+          const messageObj = completion?.choices?.[0]?.message || {};
+          const fullText = typeof messageObj.content === 'string' ? messageObj.content : '';
+          const toolCalls: any[] = Array.isArray(messageObj.tool_calls) ? messageObj.tool_calls : [];
 
-          const decoder = new TextDecoder();
-          const reader = response.body.getReader();
-          let fullText = '';
-          let toolCalls: any[] = [];
-          let currentToolCall: any = null;
-          let buffer = '';
-
-          while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed.startsWith('data:')) continue;
-              const data = trimmed.slice(5).trim();
-              if (!data || data === '[DONE]') continue;
-
-              let json: any = null;
-              try { json = JSON.parse(data); } catch { continue; }
-              const delta = json?.choices?.[0]?.delta;
-
-              if (delta?.content) {
-                fullText += delta.content;
-                if (onStream) onStream(fullText, []);
-              }
-
-              if (delta?.tool_calls) {
-                for (const toolCall of delta.tool_calls) {
-                  if (toolCall.id) {
-                    if (currentToolCall) toolCalls.push(currentToolCall);
-                    currentToolCall = {
-                      id: toolCall.id,
-                      type: 'function',
-                      function: {
-                        name: toolCall.function?.name || '',
-                        arguments: toolCall.function?.arguments || ''
-                      }
-                    };
-                  } else if (currentToolCall && toolCall.function?.arguments) {
-                    currentToolCall.function.arguments += toolCall.function.arguments;
-                  }
-                }
-              }
-            }
-          }
-
-          if (currentToolCall) toolCalls.push(currentToolCall);
+          if (onStream && fullText) onStream(fullText, []);
 
           for (const call of toolCalls) {
-            if (call.function.name === 'activate_tool') {
+            if (call?.function?.name === 'activate_tool') {
               let args: any = {};
-              try { args = JSON.parse(call.function.arguments); } catch {}
+              try { args = JSON.parse(call.function.arguments || '{}'); } catch {}
               let initialData = {};
               try { if (args.initialData) initialData = JSON.parse(args.initialData); } catch {}
               onToolCall(args.toolId, initialData);
-            } else if (call.function.name === 'draft_document') {
+            } else if (call?.function?.name === 'draft_document') {
               let args: any = {};
-              try { args = JSON.parse(call.function.arguments); } catch {}
+              try { args = JSON.parse(call.function.arguments || '{}'); } catch {}
               onDraftCall(args.title, args.content, args.type);
             }
           }
