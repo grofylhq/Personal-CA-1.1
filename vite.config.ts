@@ -14,9 +14,9 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         '/api/openrouter': {
-          target: 'https://openrouter.ai/api/v1',
+          target: 'https://openrouter.ai/api/v1/chat/completions',
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/openrouter/, ''),
+          rewrite: () => '',
           configure: (proxy) => {
             proxy.on('proxyReq', (proxyReq) => {
               const key = env.OPENROUTER_API_KEY;

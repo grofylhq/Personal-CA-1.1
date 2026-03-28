@@ -38,6 +38,8 @@ An advanced AI-powered financial, compliance, and business-intelligence assistan
    npm run dev
    ```
 
+> Production note (Vercel): this repo includes `api/openrouter.ts`, so deploy as a Vercel project (not static export) to enable server-side OpenRouter proxying.
+
 ## Supabase Setup (Production)
 
 1. Create a new [Supabase](https://supabase.com) project.
