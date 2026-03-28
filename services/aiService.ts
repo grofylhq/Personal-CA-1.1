@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { TOOLS } from '../constants';
 import { DEFAULT_MODELS } from '../constants';
+import { AI_MODELS } from '../constants';
 import { UserProfile, NewsItem, AIProvider } from '../types';
 
 interface PuterAI {
@@ -19,6 +20,7 @@ declare global {
 
 
 const MAX_PUTER_HISTORY_ITEMS = 20;
+const getDefaultProvider = (): AIProvider => 'openrouter';
 
 const normalizeModelForProvider = (provider: AIProvider, model?: string): string => {
   if (!model) return DEFAULT_MODELS[provider];
@@ -159,7 +161,7 @@ export const sendMessageToAI = async (
   onStream?: (text: string, sources?: {uri: string, title: string}[]) => void,
   attachments?: { data: string, mimeType: string }[],
   saveHistory: boolean = true,
-  provider: AIProvider = 'gemini',
+  provider: AIProvider = 'openrouter',
   model?: string
 ): Promise<{text: string, sources: {uri: string, title: string}[]}> => {
   
@@ -171,9 +173,10 @@ export const sendMessageToAI = async (
   }
 
   const currentContent: Content = { role: 'user', parts: currentParts };
-  const resolvedModel = normalizeModelForProvider(provider, model);
+  const enforcedProvider: AIProvider = getDefaultProvider();
+  const resolvedModel = normalizeModelForProvider(enforcedProvider, model);
   
-  if (provider === 'gemini') {
+  if (enforcedProvider === 'gemini') {
       if (!process.env.GEMINI_API_KEY) throw new Error("CORE_NODE_OFFLINE");
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -248,7 +251,7 @@ export const sendMessageToAI = async (
         console.error("Gemini Error:", error);
         throw error;
       }
-  } else if (provider === 'openai') {
+  } else if (enforcedProvider === 'openai') {
       if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_NODE_OFFLINE");
       const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, dangerouslyAllowBrowser: true });
 
@@ -366,7 +369,7 @@ export const sendMessageToAI = async (
           throw error;
       }
 
-  } else if (provider === 'puter') {
+  } else if (enforcedProvider === 'puter') {
       if (typeof window === 'undefined' || !window.puter?.ai?.chat) {
         throw new Error('PUTER_SDK_NOT_AVAILABLE');
       }
@@ -418,18 +421,7 @@ User: ${message}`;
           console.error('Puter Error:', error);
           throw error;
       }
-  } else if (provider === 'openrouter') {
-      if (!process.env.OPENROUTER_API_KEY) throw new Error("OPENROUTER_NODE_OFFLINE");
-      const openrouter = new OpenAI({
-          apiKey: process.env.OPENROUTER_API_KEY,
-          baseURL: 'https://openrouter.ai/api/v1',
-          defaultHeaders: {
-            'HTTP-Referer': 'https://personal-ca.local',
-            'X-Title': 'Personal CA'
-          },
-          dangerouslyAllowBrowser: true
-      });
-
+  } else if (enforcedProvider === 'openrouter') {
       try {
           const messages: any[] = [
               { role: 'system', content: getSystemInstruction(profile) },
@@ -440,110 +432,137 @@ User: ${message}`;
               { role: 'user', content: message }
           ];
 
-          const stream = await openrouter.chat.completions.create({
-              model: resolvedModel,
-              messages: messages,
-              stream: true,
-              tools: [
-                  {
-                      type: 'function',
-                      function: {
-                          name: 'activate_tool',
-                          description: 'Initializes a specific statutory calculator or financial module.',
-                          parameters: {
-                              type: 'object',
-                              properties: {
-                                  toolId: { type: 'string', enum: TOOLS.map(t => t.id) },
-                                  initialData: { type: 'string', description: 'Prefill data as JSON string.' }
-                              },
-                              required: ['toolId']
-                          }
-                      }
-                  },
-                  {
-                      type: 'function',
-                      function: {
-                          name: 'draft_document',
-                          description: 'Generates a formal legal, tax, or corporate draft on the professional canvas.',
-                          parameters: {
-                              type: 'object',
-                              properties: {
-                                  title: { type: 'string', description: 'Formal title of the document.' },
-                                  content: { type: 'string', description: 'Complete document content in Markdown.' },
-                                  type: { type: 'string', enum: ['Legal', 'Tax', 'Corporate', 'Audit', 'Strategic'] }
-                              },
-                              required: ['title', 'content', 'type']
-                          }
-                      }
+          const buildPayload = (modelId: string) => ({
+            model: modelId,
+            messages,
+            stream: false as const,
+            max_tokens: 1200,
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'activate_tool',
+                  description: 'Initializes a specific statutory calculator or financial module.',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      toolId: { type: 'string', enum: TOOLS.map(t => t.id) },
+                      initialData: { type: 'string', description: 'Prefill data as JSON string.' }
+                    },
+                    required: ['toolId']
                   }
-              ]
+                }
+              },
+              {
+                type: 'function',
+                function: {
+                  name: 'draft_document',
+                  description: 'Generates a formal legal, tax, or corporate draft on the professional canvas.',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      title: { type: 'string', description: 'Formal title of the document.' },
+                      content: { type: 'string', description: 'Complete document content in Markdown.' },
+                      type: { type: 'string', enum: ['Legal', 'Tax', 'Corporate', 'Audit', 'Strategic'] }
+                    },
+                    required: ['title', 'content', 'type']
+                  }
+                }
+              }
+            ]
           });
+          const sendOpenRouter = async (payload: Record<string, unknown>) => {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 45000);
+            const response = await fetch('/api/openrouter', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+              signal: controller.signal,
+            }).finally(() => clearTimeout(timeout));
+            const responseText = await response.text();
+            let parsed: any = null;
+            try { parsed = responseText ? JSON.parse(responseText) : null; } catch {}
+            return { ok: response.ok, status: response.status, parsed, responseText };
+          };
 
-          let fullText = '';
-          let toolCalls: any[] = [];
-          let currentToolCall: any = null;
+          const candidateModels = [
+            resolvedModel,
+            ...AI_MODELS.map(m => m.id).filter(id => id !== resolvedModel),
+          ];
+          let apiResult: { ok: boolean; status: number; parsed: any; responseText: string } | null = null;
 
-          for await (const chunk of stream) {
-              const delta = chunk.choices[0]?.delta;
-              if (delta?.content) {
-                  fullText += delta.content;
-                  if (onStream) onStream(fullText, []);
-              }
+          for (const modelId of candidateModels) {
+            const basePayload = buildPayload(modelId);
+            // Primary: tools + reasoning
+            apiResult = await sendOpenRouter({
+              ...basePayload,
+              reasoning: { enabled: true },
+            });
 
-              if (delta?.tool_calls) {
-                  for (const toolCall of delta.tool_calls) {
-                      if (toolCall.id) {
-                          if (currentToolCall) {
-                              toolCalls.push(currentToolCall);
-                          }
-                          currentToolCall = {
-                              id: toolCall.id,
-                              type: 'function',
-                              function: {
-                                  name: toolCall.function?.name || '',
-                                  arguments: toolCall.function?.arguments || ''
-                              }
-                          };
-                      } else if (currentToolCall && toolCall.function?.arguments) {
-                          currentToolCall.function.arguments += toolCall.function.arguments;
-                      }
-                  }
-              }
+            // Fallback 1: remove reasoning if model/provider rejects it
+            if (!apiResult.ok && (apiResult.status === 400 || apiResult.status === 422)) {
+              apiResult = await sendOpenRouter(basePayload);
+            }
+
+            // Fallback 2: plain chat payload (no tools/reasoning) for strict models
+            if (!apiResult.ok && (apiResult.status === 400 || apiResult.status === 422)) {
+              const plainPayload = {
+                model: modelId,
+                messages,
+                stream: false,
+                max_tokens: 1200,
+              };
+              apiResult = await sendOpenRouter(plainPayload);
+            }
+
+            if (apiResult.ok) break;
           }
-          if (currentToolCall) {
-              toolCalls.push(currentToolCall);
+
+          if (!apiResult || !apiResult.ok) {
+            const status = apiResult?.status ?? 500;
+            const errDetail = apiResult?.parsed?.error?.message || apiResult?.parsed?.error || apiResult?.responseText || `HTTP_${status}`;
+            throw new Error(`OPENROUTER_PROXY_ERROR_${status}: ${errDetail}`);
           }
 
-          if (toolCalls.length > 0) {
-              for (const call of toolCalls) {
-                  if (call.function.name === 'activate_tool') {
-                      let args: any = {};
-                      try { args = JSON.parse(call.function.arguments); } catch(e) {}
-                      let initialData = {};
-                      try { if(args.initialData) initialData = JSON.parse(args.initialData); } catch(e) {}
-                      onToolCall(args.toolId, initialData);
-                  } else if (call.function.name === 'draft_document') {
-                      let args: any = {};
-                      try { args = JSON.parse(call.function.arguments); } catch(e) {}
-                      onDraftCall(args.title, args.content, args.type);
-                  }
-              }
+          const completion = apiResult.parsed || {};
+          const messageObj = completion?.choices?.[0]?.message || {};
+          const fullText = typeof messageObj.content === 'string'
+            ? messageObj.content
+            : Array.isArray(messageObj.content)
+              ? messageObj.content.map((p: any) => p?.text || '').join('').trim()
+              : (completion?.choices?.[0]?.text || '');
+          const toolCalls: any[] = Array.isArray(messageObj.tool_calls) ? messageObj.tool_calls : [];
+
+          if (onStream && fullText) onStream(fullText, []);
+
+          for (const call of toolCalls) {
+            if (call?.function?.name === 'activate_tool') {
+              let args: any = {};
+              try { args = JSON.parse(call.function.arguments || '{}'); } catch {}
+              let initialData = {};
+              try { if (args.initialData) initialData = JSON.parse(args.initialData); } catch {}
+              onToolCall(args.toolId, initialData);
+            } else if (call?.function?.name === 'draft_document') {
+              let args: any = {};
+              try { args = JSON.parse(call.function.arguments || '{}'); } catch {}
+              onDraftCall(args.title, args.content, args.type);
+            }
           }
 
           const finalResultText = fullText || (toolCalls.length > 0 ? "I've initialized the requested module for you." : "Transmission complete.");
 
           if (saveHistory) {
-              chatHistory.push(currentContent);
-              chatHistory.push({ role: 'model', parts: [{ text: finalResultText }] });
+            chatHistory.push(currentContent);
+            chatHistory.push({ role: 'model', parts: [{ text: finalResultText }] });
           }
 
           return { text: finalResultText, sources: [] };
-
       } catch (error: any) {
           console.error("OpenRouter Error:", error);
           throw error;
       }
-  } else if (provider === 'anthropic') {
+  } else if (enforcedProvider === 'anthropic') {
       if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_NODE_OFFLINE");
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, dangerouslyAllowBrowser: true });
 

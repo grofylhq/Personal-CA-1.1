@@ -367,7 +367,7 @@ const App: React.FC = () => {
         `Convert this into a formal, high-precision financial query for a Senior CA: "${input}". 
         Be professional, include relevant Indian tax section if applicable. 
         Only return the refined query text.`,
-        () => {}, () => {}, currentUser?.profile, undefined, undefined, false, currentUser?.profile.preferredAIProvider || 'gemini', currentUser?.profile.preferredModel
+        () => {}, () => {}, currentUser?.profile, undefined, undefined, false, currentUser?.profile.preferredAIProvider || 'openrouter', currentUser?.profile.preferredModel
       );
       if (result.text) {
         const cleaned = result.text.replace(/^["'“”‘«]|["'“”’»]$/g, '').trim();
@@ -447,7 +447,7 @@ const App: React.FC = () => {
         },
         attachments,
         true,
-        nextProfile.preferredAIProvider || 'gemini',
+        nextProfile.preferredAIProvider || 'openrouter',
         nextProfile.preferredModel
       );
       
