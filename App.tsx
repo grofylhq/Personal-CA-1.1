@@ -16,6 +16,7 @@ import { Logo } from './components/Logo';
 import { SUGGESTIONS } from './constants';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import { Analytics } from '@vercel/analytics/react';
 import { 
   Send, Mic, LayoutGrid, Bell, Bot, User, 
   FileText, Calculator, TrendingUp, 
@@ -857,6 +858,7 @@ const App: React.FC = () => {
       }} />
       <GuidedLearningOverlay isOpen={showGuidedLearning} onClose={() => setShowGuidedLearning(false)} onSelectPath={(prompt) => handleSend(prompt)} />
       {showHistory && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[45] lg:hidden" onClick={() => setShowHistory(false)} />}
+      <Analytics />
     </div>
   );
 };
