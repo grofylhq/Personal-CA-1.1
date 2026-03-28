@@ -431,11 +431,10 @@ User: ${message}`;
               { role: 'user', content: message }
           ];
 
-          const payload = {
+          const basePayload = {
             model: resolvedModel,
             messages,
-            stream: false,
-            reasoning: { enabled: true },
+            stream: false as const,
             tools: [
               {
                 type: 'function',
@@ -470,19 +469,51 @@ User: ${message}`;
               }
             ]
           };
+          const sendOpenRouter = async (payload: Record<string, unknown>) => {
+            const response = await fetch('/api/openrouter', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            const responseText = await response.text();
+            let parsed: any = null;
+            try { parsed = responseText ? JSON.parse(responseText) : null; } catch {}
+            return { ok: response.ok, status: response.status, parsed, responseText };
+          };
 
-          const response = await fetch('/api/openrouter', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+          // Primary: tools + reasoning
+          let apiResult = await sendOpenRouter({
+            ...basePayload,
+            reasoning: { enabled: true },
           });
 
-          if (!response.ok) {
-            throw new Error(`OPENROUTER_PROXY_ERROR_${response.status}`);
+          // Fallback 1: remove reasoning if model/provider rejects it
+          if (!apiResult.ok && (apiResult.status === 400 || apiResult.status === 422)) {
+            apiResult = await sendOpenRouter(basePayload);
           }
-          const completion = await response.json();
+
+          // Fallback 2: plain chat payload (no tools/reasoning) for strict models
+          if (!apiResult.ok && (apiResult.status === 400 || apiResult.status === 422)) {
+            const plainPayload = {
+              model: resolvedModel,
+              messages,
+              stream: false,
+            };
+            apiResult = await sendOpenRouter(plainPayload);
+          }
+
+          if (!apiResult.ok) {
+            const errDetail = apiResult.parsed?.error?.message || apiResult.parsed?.error || apiResult.responseText || `HTTP_${apiResult.status}`;
+            throw new Error(`OPENROUTER_PROXY_ERROR_${apiResult.status}: ${errDetail}`);
+          }
+
+          const completion = apiResult.parsed || {};
           const messageObj = completion?.choices?.[0]?.message || {};
-          const fullText = typeof messageObj.content === 'string' ? messageObj.content : '';
+          const fullText = typeof messageObj.content === 'string'
+            ? messageObj.content
+            : Array.isArray(messageObj.content)
+              ? messageObj.content.map((p: any) => p?.text || '').join('').trim()
+              : (completion?.choices?.[0]?.text || '');
           const toolCalls: any[] = Array.isArray(messageObj.tool_calls) ? messageObj.tool_calls : [];
 
           if (onStream && fullText) onStream(fullText, []);

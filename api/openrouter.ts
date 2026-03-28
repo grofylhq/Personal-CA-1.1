@@ -1,4 +1,9 @@
 export default async function handler(req: any, res: any) {
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Allow', 'POST, OPTIONS');
+    return res.status(204).end();
+  }
+
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Method Not Allowed' });
@@ -25,7 +30,7 @@ export default async function handler(req: any, res: any) {
 
     const text = await upstream.text();
     res.status(upstream.status);
-    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json');
     return res.send(text);
   } catch (error: any) {
     return res.status(502).json({ error: 'OpenRouter upstream request failed', detail: error?.message || 'Unknown error' });
