@@ -560,7 +560,36 @@ User: ${message}`;
           return { text: finalResultText, sources: [] };
       } catch (error: any) {
           console.error("OpenRouter Error:", error);
-          throw error;
+          // Resilience fallback: keep chat responsive even if OpenRouter/server env is unavailable.
+          // 1) Attempt Puter AI bridge when available in browser.
+          // 2) Return a graceful assistant response instead of throwing hard error.
+          try {
+            if (typeof window !== 'undefined' && window.puter?.ai?.chat) {
+              const response = await window.puter.ai.chat(message, {
+                model: 'openai/gpt-4.1-mini',
+                stream: false,
+              });
+              const fallbackText = getPuterTextDelta(response) || getPuterTextDelta(response?.message?.content);
+              if (fallbackText) {
+                if (saveHistory) {
+                  chatHistory.push(currentContent);
+                  chatHistory.push({ role: 'model', parts: [{ text: fallbackText }] });
+                }
+                if (onStream) onStream(fallbackText, []);
+                return { text: fallbackText, sources: [] };
+              }
+            }
+          } catch (puterError) {
+            console.error('Puter fallback failed:', puterError);
+          }
+
+          const gracefulFallback = "I’m temporarily unable to reach the primary AI gateway. Please retry in a moment. If this persists, configure OPENROUTER_API_KEY on the server or connect Puter AI.";
+          if (saveHistory) {
+            chatHistory.push(currentContent);
+            chatHistory.push({ role: 'model', parts: [{ text: gracefulFallback }] });
+          }
+          if (onStream) onStream(gracefulFallback, []);
+          return { text: gracefulFallback, sources: [] };
       }
   } else if (enforcedProvider === 'anthropic') {
       if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_NODE_OFFLINE");
