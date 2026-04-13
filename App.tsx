@@ -4,6 +4,7 @@ import { Content } from "@google/genai";
 import { Message, UserProfile, AppView, ChatSession, UserAccount, SubscriptionTier, DraftDocument } from './types';
 import { sendMessageToAI, transcribeAudio, resetChatSession, clearChatSession, initializeAI } from './services/aiService';
 import { authAPI, userAPI } from './services/database';
+import { supabase } from './utils/supabase';
 import ToolsPanel from './components/ToolsPanel';
 import NewsPanel from './components/NewsPanel';
 import ProfilePanel from './components/ProfilePanel';
@@ -137,8 +138,14 @@ const AnimatedPlaceholder: React.FC = () => {
 const MAX_FILES = 10;
 const MAX_TOTAL_SIZE_MB = 20;
 
+type Todo = {
+  id: string;
+  name: string;
+};
+
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => authAPI.getSession());
+  const [todos, setTodos] = useState<Todo[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -209,6 +216,30 @@ const App: React.FC = () => {
     else document.documentElement.classList.remove('dark');
     localStorage.setItem('theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function getTodos() {
+      const { data, error } = await supabase.from('todos').select('id,name');
+      if (error) {
+        console.error('Failed to fetch todos:', error.message);
+        return;
+      }
+
+      if (isMounted && data) {
+        setTodos(data as Todo[]);
+      }
+    }
+
+    getTodos().catch((error) => {
+      console.error('Unexpected todo fetch error:', error);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     if (chatContainerRef.current) {
