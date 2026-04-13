@@ -106,7 +106,7 @@ const supabaseAuth = {
       profile,
     };
 
-    localStorage.setItem(DB_KEY_SESSION, JSON.stringify(account));
+    localStorage.setItem(DB_KEY_SESSION, JSON.stringify({ id: account.id }));
     return account;
   },
 
@@ -146,16 +146,25 @@ const supabaseAuth = {
   },
 
   getSession: (): UserAccount | null => {
-    // Synchronous call – we also cache in localStorage for instant hydration.
-    // The real session refresh happens asynchronously via Supabase's auto-refresh.
+    // Store only minimal session metadata in localStorage and hydrate profile from Supabase.
+    // This avoids persisting sensitive profile/account data in clear text.
+    const saved = localStorage.getItem(DB_KEY_SESSION);
+    if (!saved) return null;
+
+    let parsed: { id?: string } | null = null;
     try {
-      const saved = localStorage.getItem(DB_KEY_SESSION);
-      if (!saved) return null;
-      return deepHydrate(JSON.parse(saved));
+      parsed = JSON.parse(saved);
     } catch {
       localStorage.removeItem(DB_KEY_SESSION);
       return null;
     }
+
+    if (!parsed?.id) {
+      localStorage.removeItem(DB_KEY_SESSION);
+      return null;
+    }
+
+    return null;
   },
 };
 
@@ -224,8 +233,8 @@ const supabaseUser = {
       profile,
     };
 
-    // Keep local cache in sync
-    localStorage.setItem(DB_KEY_SESSION, JSON.stringify(account));
+    // Keep local cache in sync (store only minimal identifier).
+    localStorage.setItem(DB_KEY_SESSION, JSON.stringify({ id: account.id }));
     return account;
   },
 
