@@ -2,7 +2,7 @@ import { GoogleGenAI, FunctionDeclaration, Type, GenerateContentResponse, Conten
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { TOOLS } from '../constants';
-import { DEFAULT_MODELS } from '../constants';
+import { DEFAULT_MODELS, AI_MODELS } from '../constants';
 import { UserProfile, NewsItem, AIProvider } from '../types';
 
 const getDefaultProvider = (preferred?: AIProvider): AIProvider => preferred || 'openrouter';
@@ -25,6 +25,10 @@ const resolveProvider = (preferred?: AIProvider): AIProvider => {
 
 const normalizeModelForProvider = (provider: AIProvider, model?: string): string => {
   if (!model) return DEFAULT_MODELS[provider];
+  const providerModels = AI_MODELS.filter(m => m.provider === provider).map(m => m.id);
+  if (providerModels.length > 0 && !providerModels.includes(model)) {
+    return DEFAULT_MODELS[provider];
+  }
   return model;
 };
 

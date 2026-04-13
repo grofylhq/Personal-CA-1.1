@@ -503,8 +503,15 @@ const App: React.FC = () => {
       });
       nextProfile.chatSessions = updatedHistorySessions;
       await updateProfile(nextProfile); 
-    } catch (error) {
-      setMessages(prev => prev.map(m => m.id === modelMsgId ? { ...m, content: "⚠️ System connection interrupted. The statutory engine is offline. Please check your network and retry.", isError: true } : m));
+    } catch (error: any) {
+      const errorMessage = typeof error?.message === 'string' ? error.message : 'Unknown error';
+      const userSafeMessage =
+        errorMessage.includes('OPENROUTER_PROXY_ERROR_401')
+          ? '⚠️ OpenRouter authentication failed (401). Please verify your OPENROUTER_API_KEY in Vercel and redeploy.'
+          : errorMessage.includes('OPENROUTER_PROXY_ERROR_400')
+            ? '⚠️ Request rejected (400). Your saved model/provider combination was invalid and has been reset. Please retry.'
+            : "⚠️ System connection interrupted. The statutory engine is offline. Please check your network and retry.";
+      setMessages(prev => prev.map(m => m.id === modelMsgId ? { ...m, content: userSafeMessage, isError: true } : m));
     } finally { 
       setIsLoading(false); 
       setIsStreaming(false); 
