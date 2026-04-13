@@ -3,46 +3,13 @@ import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { TOOLS } from '../constants';
 import { DEFAULT_MODELS } from '../constants';
-import { AI_MODELS } from '../constants';
 import { UserProfile, NewsItem, AIProvider } from '../types';
 
-interface PuterAI {
-  chat: (prompt: string, options?: { model?: string; stream?: boolean }) => Promise<any>;
-}
-
-declare global {
-  interface Window {
-    puter?: {
-      ai?: PuterAI;
-    };
-  }
-}
-
-
-const MAX_PUTER_HISTORY_ITEMS = 20;
 const getDefaultProvider = (): AIProvider => 'openrouter';
 
 const normalizeModelForProvider = (provider: AIProvider, model?: string): string => {
   if (!model) return DEFAULT_MODELS[provider];
-
-  if (provider === 'puter') {
-    const puterModel = model.includes('/') ? model : `openai/${model}`;
-    return puterModel;
-  }
-
   return model;
-};
-
-const getPuterTextDelta = (part: any): string => {
-  if (!part) return '';
-  if (typeof part === 'string') return part;
-  if (typeof part?.text === 'string') return part.text;
-  if (typeof part?.delta === 'string') return part.delta;
-  if (typeof part?.toString === 'function') {
-    const asText = part.toString();
-    return asText === '[object Object]' ? '' : asText;
-  }
-  return '';
 };
 
 /**
@@ -369,58 +336,6 @@ export const sendMessageToAI = async (
           throw error;
       }
 
-  } else if (enforcedProvider === 'puter') {
-      if (typeof window === 'undefined' || !window.puter?.ai?.chat) {
-        throw new Error('PUTER_SDK_NOT_AVAILABLE');
-      }
-
-      try {
-          const historyText = chatHistory
-              .slice(-MAX_PUTER_HISTORY_ITEMS)
-              .map(h => `${h.role === 'model' ? 'Assistant' : 'User'}: ${h.parts?.map(p => p.text).filter(Boolean).join(' ') || ''}`)
-              .join('\n');
-
-          const prompt = `${getSystemInstruction(profile)}
-
-Conversation History:
-${historyText || 'No previous history.'}
-
-User: ${message}`;
-
-          const response = await window.puter.ai.chat(prompt, {
-              model: resolvedModel,
-              stream: Boolean(onStream)
-          });
-
-          let fullText = '';
-
-          if (response && typeof response[Symbol.asyncIterator] === 'function') {
-            for await (const part of response) {
-              const delta = getPuterTextDelta(part);
-              if (delta) {
-                fullText += delta;
-                if (onStream) onStream(fullText, []);
-              }
-            }
-          } else {
-            const oneShot = getPuterTextDelta(response) || getPuterTextDelta(response?.message?.content);
-            fullText = oneShot;
-            if (onStream && fullText) onStream(fullText, []);
-          }
-
-          const finalResultText = fullText || 'Transmission complete.';
-
-          if (saveHistory) {
-              chatHistory.push(currentContent);
-              chatHistory.push({ role: 'model', parts: [{ text: finalResultText }] });
-          }
-
-          return { text: finalResultText, sources: [] };
-
-      } catch (error: any) {
-          console.error('Puter Error:', error);
-          throw error;
-      }
   } else if (enforcedProvider === 'openrouter') {
       try {
           const messages: any[] = [
@@ -483,40 +398,69 @@ User: ${message}`;
             const responseText = await response.text();
             let parsed: any = null;
             try { parsed = responseText ? JSON.parse(responseText) : null; } catch {}
-            return { ok: response.ok, status: response.status, parsed, responseText };
+            if (response.ok) {
+              return { ok: true, status: response.status, parsed, responseText };
+            }
+
+            const serverError = parsed?.error || '';
+            const serverDetail = parsed?.detail || '';
+            const missingServerKey =
+              typeof serverError === 'string' && serverError.includes('OPENROUTER_API_KEY');
+
+            if (
+              missingServerKey ||
+              response.status === 404 ||
+              response.status === 405 ||
+              response.status === 502 ||
+              response.status === 504
+            ) {
+              const browserApiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+              if (browserApiKey) {
+                const directResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${browserApiKey}`,
+                    'HTTP-Referer': window.location.origin,
+                    'X-OpenRouter-Title': 'Personal CA',
+                  },
+                  body: JSON.stringify(payload),
+                  signal: controller.signal,
+                });
+                const directText = await directResponse.text();
+                let directParsed: any = null;
+                try { directParsed = directText ? JSON.parse(directText) : null; } catch {}
+                return { ok: directResponse.ok, status: directResponse.status, parsed: directParsed, responseText: directText };
+              }
+            }
+
+            return { ok: false, status: response.status, parsed, responseText: responseText || serverDetail };
           };
 
-          const candidateModels = [
-            resolvedModel,
-            ...AI_MODELS.map(m => m.id).filter(id => id !== resolvedModel),
-          ];
           let apiResult: { ok: boolean; status: number; parsed: any; responseText: string } | null = null;
+          const basePayload = buildPayload(resolvedModel);
 
-          for (const modelId of candidateModels) {
-            const basePayload = buildPayload(modelId);
-            // Primary: tools + reasoning
-            apiResult = await sendOpenRouter({
-              ...basePayload,
-              reasoning: { enabled: true },
-            });
+          // Attempt 1: tools + reasoning
+          apiResult = await sendOpenRouter({
+            ...basePayload,
+            reasoning: { enabled: true },
+          });
 
-            // Fallback 1: remove reasoning if model/provider rejects it
-            if (!apiResult.ok && (apiResult.status === 400 || apiResult.status === 422)) {
-              apiResult = await sendOpenRouter(basePayload);
-            }
+          // Retry only for schema incompatibility (not for 429 rate limits)
+          if (!apiResult.ok && (apiResult.status === 400 || apiResult.status === 422)) {
+            // Attempt 2: tools without reasoning
+            apiResult = await sendOpenRouter(basePayload);
+          }
 
-            // Fallback 2: plain chat payload (no tools/reasoning) for strict models
-            if (!apiResult.ok && (apiResult.status === 400 || apiResult.status === 422)) {
-              const plainPayload = {
-                model: modelId,
-                messages,
-                stream: false,
-                max_tokens: 1200,
-              };
-              apiResult = await sendOpenRouter(plainPayload);
-            }
-
-            if (apiResult.ok) break;
+          if (!apiResult.ok && (apiResult.status === 400 || apiResult.status === 422)) {
+            // Attempt 3: plain chat payload (no tools/reasoning)
+            const plainPayload = {
+              model: resolvedModel,
+              messages,
+              stream: false,
+              max_tokens: 1200,
+            };
+            apiResult = await sendOpenRouter(plainPayload);
           }
 
           if (!apiResult || !apiResult.ok) {

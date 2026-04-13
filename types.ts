@@ -96,6 +96,7 @@ export interface UserAccount {
   id: string;
   email: string;
   passwordHash: string;
+  passwordSalt?: string;
   name: string;
   profile: UserProfile;
 }
@@ -121,7 +122,7 @@ export interface NewsItem {
 
 export type AppView = 'chat' | 'dashboard';
 
-export type AIProvider = 'gemini' | 'openai' | 'anthropic' | 'openrouter' | 'puter';
+export type AIProvider = 'gemini' | 'openai' | 'anthropic' | 'openrouter';
 
 export interface AIModelConfig {
   id: string;

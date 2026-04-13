@@ -10,6 +10,7 @@ export default async function handler(req, res) {
   }
 
   const apiKey = process.env.OPENROUTER_API_KEY;
+  const fallbackApiKey = process.env.OPENROUTER_API_KEY_FALLBACK;
   if (!apiKey) {
     return res.status(500).json({ error: 'OPENROUTER_API_KEY is not configured on server.' });
   }
@@ -27,26 +28,59 @@ export default async function handler(req, res) {
     if (!body) {
       return res.status(400).json({ error: 'Request body is empty.' });
     }
+    if (body.length > 200_000) {
+      return res.status(413).json({ error: 'Request body too large.' });
+    }
 
-    const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const parsedBody = JSON.parse(body);
+    const allowedModels = new Set([
+      'nvidia/nemotron-3-super-120b-a12b:free',
+      'openai/gpt-oss-120b:free',
+      'google/gemma-4-31b-it:free',
+      'qwen/qwen3-next-80b-a3b-instruct:free',
+    ]);
+    const selectedModel = typeof parsedBody?.model === 'string' ? parsedBody.model : '';
+
+    if (!allowedModels.has(selectedModel)) {
+      return res.status(400).json({
+        error: 'Invalid model selection.',
+        detail: 'Requested model is not in the server allowlist.',
+      });
+    }
+
+    const callOpenRouter = (key) => fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
-      signal: AbortSignal.timeout(25000),
+      signal: AbortSignal.timeout(60000),
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${key}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': req.headers?.origin || req.headers?.referer || 'https://personal-ca.local',
         'X-OpenRouter-Title': 'Personal CA',
       },
-      body,
+      body: JSON.stringify(parsedBody),
     });
+
+    let upstream = await callOpenRouter(apiKey);
+
+    // If primary key is rate-limited, retry once with fallback key (if configured).
+    if (upstream.status === 429 && fallbackApiKey) {
+      upstream = await callOpenRouter(fallbackApiKey);
+    }
 
     const text = await upstream.text();
     res.status(upstream.status);
     res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json');
+    if (upstream.status === 429) {
+      res.setHeader('Retry-After', upstream.headers.get('retry-after') || '8');
+      return res.send(text || JSON.stringify({ error: 'OpenRouter rate limit exceeded. Please retry shortly.' }));
+    }
     return res.send(text);
   } catch (error) {
+    if (error instanceof SyntaxError) {
+      return res.status(400).json({ error: 'Invalid JSON body.' });
+    }
     if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
-      return res.status(504).json({ error: 'OpenRouter request timed out after 25s.' });
+      return res.status(504).json({ error: 'OpenRouter request timed out after 60s.' });
     }
     return res.status(502).json({
       error: 'OpenRouter upstream request failed',
