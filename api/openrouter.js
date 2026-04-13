@@ -27,17 +27,36 @@ export default async function handler(req, res) {
     if (!body) {
       return res.status(400).json({ error: 'Request body is empty.' });
     }
+    if (body.length > 200_000) {
+      return res.status(413).json({ error: 'Request body too large.' });
+    }
+
+    const parsedBody = JSON.parse(body);
+    const allowedModels = new Set([
+      'nvidia/nemotron-3-super-120b-a12b:free',
+      'openai/gpt-oss-120b:free',
+      'google/gemma-4-31b-it:free',
+      'qwen/qwen3-next-80b-a3b-instruct:free',
+    ]);
+    const selectedModel = typeof parsedBody?.model === 'string' ? parsedBody.model : '';
+
+    if (!allowedModels.has(selectedModel)) {
+      return res.status(400).json({
+        error: 'Invalid model selection.',
+        detail: 'Requested model is not in the server allowlist.',
+      });
+    }
 
     const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
-      signal: AbortSignal.timeout(25000),
+      signal: AbortSignal.timeout(60000),
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': req.headers?.origin || req.headers?.referer || 'https://personal-ca.local',
         'X-OpenRouter-Title': 'Personal CA',
       },
-      body,
+      body: JSON.stringify(parsedBody),
     });
 
     const text = await upstream.text();
@@ -45,8 +64,11 @@ export default async function handler(req, res) {
     res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json');
     return res.send(text);
   } catch (error) {
+    if (error instanceof SyntaxError) {
+      return res.status(400).json({ error: 'Invalid JSON body.' });
+    }
     if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
-      return res.status(504).json({ error: 'OpenRouter request timed out after 25s.' });
+      return res.status(504).json({ error: 'OpenRouter request timed out after 60s.' });
     }
     return res.status(502).json({
       error: 'OpenRouter upstream request failed',
