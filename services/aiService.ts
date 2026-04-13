@@ -485,7 +485,12 @@ export const sendMessageToAI = async (
 
           if (!apiResult || !apiResult.ok) {
             const status = apiResult?.status ?? 500;
-            const errDetail = apiResult?.parsed?.error?.message || apiResult?.parsed?.error || apiResult?.responseText || `HTTP_${status}`;
+            const errDetail =
+              apiResult?.parsed?.error?.message ||
+              apiResult?.parsed?.detail ||
+              apiResult?.parsed?.error ||
+              apiResult?.responseText ||
+              `HTTP_${status}`;
             throw new Error(`OPENROUTER_PROXY_ERROR_${status}: ${errDetail}`);
           }
 

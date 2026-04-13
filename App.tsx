@@ -510,6 +510,12 @@ const App: React.FC = () => {
           ? '⚠️ OpenRouter authentication failed (401). Please verify your OPENROUTER_API_KEY in Vercel and redeploy.'
           : errorMessage.includes('OPENROUTER_PROXY_ERROR_400')
             ? '⚠️ Request rejected (400). Your saved model/provider combination was invalid and has been reset. Please retry.'
+            : errorMessage.includes('OPENROUTER_PROXY_ERROR_403')
+              ? '⚠️ OpenRouter access denied (403). Check key restrictions (domain/app) and verify your deployment URL is allowed.'
+              : errorMessage.includes('OPENROUTER_PROXY_ERROR_429')
+                ? '⚠️ OpenRouter rate limit reached (429). Please wait a moment and retry.'
+                : errorMessage.includes('OPENROUTER_API_KEY')
+                  ? '⚠️ Server key missing. Add OPENROUTER_API_KEY in Vercel Project Settings and redeploy.'
             : "⚠️ System connection interrupted. The statutory engine is offline. Please check your network and retry.";
       setMessages(prev => prev.map(m => m.id === modelMsgId ? { ...m, content: userSafeMessage, isError: true } : m));
     } finally { 
