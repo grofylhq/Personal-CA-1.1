@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
               }
               proxyReq.setHeader('Content-Type', 'application/json');
               proxyReq.setHeader('HTTP-Referer', 'https://personal-ca.local');
-              proxyReq.setHeader('X-Title', 'Personal CA');
+              proxyReq.setHeader('X-OpenRouter-Title', 'Personal CA');
             });
           },
         },

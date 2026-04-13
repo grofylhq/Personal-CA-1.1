@@ -33,6 +33,9 @@ export default async function handler(req, res) {
     }
 
     const parsedBody = JSON.parse(body);
+    if (!parsedBody || typeof parsedBody !== 'object') {
+      return res.status(400).json({ error: 'Invalid request payload.' });
+    }
     const allowedModels = new Set([
       'nvidia/nemotron-3-super-120b-a12b:free',
       'openai/gpt-oss-120b:free',
@@ -40,11 +43,18 @@ export default async function handler(req, res) {
       'qwen/qwen3-next-80b-a3b-instruct:free',
     ]);
     const selectedModel = typeof parsedBody?.model === 'string' ? parsedBody.model : '';
+    const messages = Array.isArray(parsedBody?.messages) ? parsedBody.messages : [];
 
     if (!allowedModels.has(selectedModel)) {
       return res.status(400).json({
         error: 'Invalid model selection.',
         detail: 'Requested model is not in the server allowlist.',
+      });
+    }
+    if (!messages.length) {
+      return res.status(400).json({
+        error: 'Invalid messages payload.',
+        detail: 'At least one message is required.',
       });
     }
 

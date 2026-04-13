@@ -5,7 +5,7 @@ import { TOOLS } from '../constants';
 import { DEFAULT_MODELS } from '../constants';
 import { UserProfile, NewsItem, AIProvider } from '../types';
 
-const getDefaultProvider = (): AIProvider => 'openrouter';
+const getDefaultProvider = (preferred?: AIProvider): AIProvider => preferred || 'openrouter';
 
 const normalizeModelForProvider = (provider: AIProvider, model?: string): string => {
   if (!model) return DEFAULT_MODELS[provider];
@@ -140,7 +140,7 @@ export const sendMessageToAI = async (
   }
 
   const currentContent: Content = { role: 'user', parts: currentParts };
-  const enforcedProvider: AIProvider = getDefaultProvider();
+  const enforcedProvider: AIProvider = getDefaultProvider(provider);
   const resolvedModel = normalizeModelForProvider(enforcedProvider, model);
   
   if (enforcedProvider === 'gemini') {
