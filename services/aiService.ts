@@ -3,7 +3,6 @@ import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { TOOLS } from '../constants';
 import { DEFAULT_MODELS } from '../constants';
-import { AI_MODELS } from '../constants';
 import { UserProfile, NewsItem, AIProvider } from '../types';
 
 const getDefaultProvider = (): AIProvider => 'openrouter';
@@ -438,37 +437,30 @@ export const sendMessageToAI = async (
             return { ok: false, status: response.status, parsed, responseText: responseText || serverDetail };
           };
 
-          const candidateModels = [
-            resolvedModel,
-            ...AI_MODELS.map(m => m.id).filter(id => id !== resolvedModel),
-          ];
           let apiResult: { ok: boolean; status: number; parsed: any; responseText: string } | null = null;
+          const basePayload = buildPayload(resolvedModel);
 
-          for (const modelId of candidateModels) {
-            const basePayload = buildPayload(modelId);
-            // Primary: tools + reasoning
-            apiResult = await sendOpenRouter({
-              ...basePayload,
-              reasoning: { enabled: true },
-            });
+          // Attempt 1: tools + reasoning
+          apiResult = await sendOpenRouter({
+            ...basePayload,
+            reasoning: { enabled: true },
+          });
 
-            // Fallback 1: remove reasoning if model/provider rejects it
-            if (!apiResult.ok && (apiResult.status === 400 || apiResult.status === 422)) {
-              apiResult = await sendOpenRouter(basePayload);
-            }
+          // Retry only for schema incompatibility (not for 429 rate limits)
+          if (!apiResult.ok && (apiResult.status === 400 || apiResult.status === 422)) {
+            // Attempt 2: tools without reasoning
+            apiResult = await sendOpenRouter(basePayload);
+          }
 
-            // Fallback 2: plain chat payload (no tools/reasoning) for strict models
-            if (!apiResult.ok && (apiResult.status === 400 || apiResult.status === 422)) {
-              const plainPayload = {
-                model: modelId,
-                messages,
-                stream: false,
-                max_tokens: 1200,
-              };
-              apiResult = await sendOpenRouter(plainPayload);
-            }
-
-            if (apiResult.ok) break;
+          if (!apiResult.ok && (apiResult.status === 400 || apiResult.status === 422)) {
+            // Attempt 3: plain chat payload (no tools/reasoning)
+            const plainPayload = {
+              model: resolvedModel,
+              messages,
+              stream: false,
+              max_tokens: 1200,
+            };
+            apiResult = await sendOpenRouter(plainPayload);
           }
 
           if (!apiResult || !apiResult.ok) {
