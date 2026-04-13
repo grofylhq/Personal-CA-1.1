@@ -8,7 +8,7 @@ const DB_KEY_SESSION = 'pca_current_user';
 const ALLOWED_OPENROUTER_MODELS = new Set([
   'nvidia/nemotron-3-super-120b-a12b:free',
   'openai/gpt-oss-120b:free',
-  'google/gemma-3-27b-it:free',
+  'google/gemma-4-31b-it:free',
   'qwen/qwen3-next-80b-a3b-instruct:free',
 ]);
 const DEFAULT_OPENROUTER_MODEL = 'nvidia/nemotron-3-super-120b-a12b:free';
