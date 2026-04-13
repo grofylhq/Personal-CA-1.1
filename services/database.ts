@@ -98,42 +98,16 @@ const supabaseAuth = {
     if (error || !data.user) throw new Error(error?.message ?? 'Authentication failed');
 
     const profile = enforceAIProfileDefaults(await supabaseUser.fetchProfile(data.user.id));
-    return {
+    const account = {
       id: data.user.id,
       email: data.user.email ?? email,
       passwordHash: '',
       name: profile.name,
       profile,
     };
-  },
 
-  loginWithGoogle: async (): Promise<UserAccount> => {
-    const sb = getSupabaseClient()!;
-    const { error } = await sb.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin },
-    });
-    if (error) throw new Error(error.message);
-
-    // After redirect the session is available synchronously:
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session?.user) throw new Error('Google sign-in did not complete');
-
-    const profile = enforceAIProfileDefaults(await supabaseUser.ensureProfile(
-      session.user.id,
-      session.user.email ?? '',
-      session.user.user_metadata?.full_name ?? 'Google User',
-      session.user.user_metadata?.avatar_url ?? '',
-      true,
-    ));
-
-    return {
-      id: session.user.id,
-      email: session.user.email ?? '',
-      passwordHash: '',
-      name: profile.name,
-      profile,
-    };
+    localStorage.setItem(DB_KEY_SESSION, JSON.stringify(account));
+    return account;
   },
 
   register: async (email: string, password: string, name: string): Promise<UserAccount> => {
@@ -153,18 +127,22 @@ const supabaseAuth = {
       name.trim(),
     ));
 
-    return {
+    const account = {
       id: data.user.id,
       email: cleanEmail,
       passwordHash: '',
       name: name.trim(),
       profile,
     };
+
+    localStorage.setItem(DB_KEY_SESSION, JSON.stringify(account));
+    return account;
   },
 
   logout: async () => {
     const sb = getSupabaseClient()!;
     await sb.auth.signOut();
+    localStorage.removeItem(DB_KEY_SESSION);
   },
 
   getSession: (): UserAccount | null => {
@@ -200,7 +178,6 @@ const supabaseUser = {
     email: string,
     name: string,
     avatarUrl = '',
-    isOAuth = false,
   ): Promise<UserProfile> => {
     const sb = getSupabaseClient()!;
 
@@ -215,8 +192,8 @@ const supabaseUser = {
 
     const newProfile = createDefaultProfile(userId, email, name, {
       avatarUrl,
-      memoryBank: isOAuth ? 'Google Linked Account Initialized.' : '',
-      designation: isOAuth ? 'Strategic Investor' : 'Executive',
+      memoryBank: '',
+      designation: 'Executive',
     });
 
     const { data, error } = await sb
@@ -290,50 +267,6 @@ const localAuth = {
       u => u.email.toLowerCase() === email.toLowerCase().trim() && u.passwordHash === hashedPassword
     );
     if (!user) throw new Error('Invalid Credentials / Identity Node Mismatch');
-
-    const hydratedUser = deepHydrate(user);
-    hydratedUser.profile = enforceAIProfileDefaults(hydratedUser.profile);
-    localStorage.setItem(DB_KEY_SESSION, JSON.stringify(hydratedUser));
-    return hydratedUser;
-  },
-
-  loginWithGoogle: async (): Promise<UserAccount> => {
-    await delay(1500);
-    const usersRaw = localStorage.getItem(DB_KEY_USERS);
-    const users: UserAccount[] = usersRaw ? JSON.parse(usersRaw) : [];
-
-    const googleIdentity = {
-      email: 'investor.demo@gmail.com',
-      name: 'Google User',
-      id: 'google-oauth2-12345',
-      picture: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150&h=150',
-    };
-
-    let user = users.find(u => u.email.toLowerCase() === googleIdentity.email.toLowerCase());
-
-    if (!user) {
-      const newProfile = createDefaultProfile(
-        crypto.randomUUID(),
-        googleIdentity.email,
-        googleIdentity.name,
-        {
-          avatarUrl: googleIdentity.picture,
-          designation: 'Strategic Investor',
-          memoryBank: 'Google Linked Account Initialized.',
-        },
-      );
-
-      user = {
-        id: newProfile.id,
-        email: googleIdentity.email,
-        passwordHash: 'social_linked',
-        name: googleIdentity.name,
-        profile: newProfile,
-      };
-
-      users.push(user);
-      localStorage.setItem(DB_KEY_USERS, JSON.stringify(users));
-    }
 
     const hydratedUser = deepHydrate(user);
     hydratedUser.profile = enforceAIProfileDefaults(hydratedUser.profile);
@@ -438,16 +371,22 @@ const localUser = {
 // Supabase implementations are retained above for future production use.
 
 export const authAPI = {
-  login: (email: string, password: string) => localAuth.login(email, password),
-  loginWithGoogle: () => localAuth.loginWithGoogle(),
-  register: (email: string, password: string, name: string) => localAuth.register(email, password, name),
-  logout: () => localAuth.logout(),
-  getSession: (): UserAccount | null => localAuth.getSession(),
+  login: (email: string, password: string) =>
+    isSupabaseConfigured() ? supabaseAuth.login(email, password) : localAuth.login(email, password),
+  register: (email: string, password: string, name: string) =>
+    isSupabaseConfigured() ? supabaseAuth.register(email, password, name) : localAuth.register(email, password, name),
+  logout: () => (isSupabaseConfigured() ? supabaseAuth.logout() : localAuth.logout()),
+  getSession: (): UserAccount | null =>
+    isSupabaseConfigured() ? supabaseAuth.getSession() : localAuth.getSession(),
 };
 
 export const userAPI = {
   updateProfile: (accountId: string, updates: Partial<UserProfile>) =>
-    localUser.updateProfile(accountId, updates),
+    isSupabaseConfigured()
+      ? supabaseUser.updateProfile(accountId, updates)
+      : localUser.updateProfile(accountId, updates),
   upgradeSubscription: (accountId: string, tier: SubscriptionTier) =>
-    localUser.upgradeSubscription(accountId, tier),
+    isSupabaseConfigured()
+      ? supabaseUser.upgradeSubscription(accountId, tier)
+      : localUser.upgradeSubscription(accountId, tier),
 };
