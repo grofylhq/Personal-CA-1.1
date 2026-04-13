@@ -1,23 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { UserAccount, UserProfile } from '../types';
+import { UserAccount } from '../types';
 import { authAPI } from '../services/database';
 import { 
   Shield, Mail, Lock, ArrowRight, UserPlus, 
-  Fingerprint, ShieldCheck, Zap, Globe, Eye, EyeOff, Loader2,
+  Fingerprint, ShieldCheck, Eye, EyeOff, Loader2,
   AlertCircle, Activity, CheckCircle2, Hexagon
 } from 'lucide-react';
 import { Logo } from './Logo';
 
-const GoogleIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 48 48" className="shrink-0">
-    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z"/>
-    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-    <path fill="none" d="M0 0h48v48H0z"/>
-  </svg>
-);
 
 interface AuthScreenProps {
   onLogin: (account: UserAccount) => void;
@@ -31,25 +22,12 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [verificationStep, setVerificationStep] = useState(0);
 
   useEffect(() => {
     setError('');
     setVerificationStep(0);
   }, [isLogin]);
-
-  const handleGoogleLogin = async () => {
-    setError('');
-    setIsGoogleLoading(true);
-    try {
-      const user = await authAPI.loginWithGoogle();
-      onLogin(user);
-    } catch (err: any) {
-      setError(err.message || 'Google Authentication Failed');
-      setIsGoogleLoading(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -185,13 +163,13 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                      className={`absolute top-1.5 bottom-1.5 w-[calc(50%-6px)] bg-white dark:bg-slate-800 rounded-xl shadow-sm transition-all duration-300 ease-spring ${isLogin ? 'left-1.5' : 'left-[calc(50%+4.5px)]'}`}
                   ></div>
                   <button 
-                     onClick={() => !isLoading && !isGoogleLoading && setIsLogin(true)}
+                     onClick={() => !isLoading && setIsLogin(true)}
                      className={`flex-1 relative z-10 py-3 text-[10px] font-bold uppercase tracking-widest transition-colors ${isLogin ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}
                   >
                      Establish Link
                   </button>
                   <button 
-                     onClick={() => !isLoading && !isGoogleLoading && setIsLogin(false)}
+                     onClick={() => !isLoading && setIsLogin(false)}
                      className={`flex-1 relative z-10 py-3 text-[10px] font-bold uppercase tracking-widest transition-colors ${!isLogin ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}
                   >
                      Initialize
@@ -202,24 +180,6 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                   <h3 className="text-xl font-display font-bold text-slate-900 dark:text-white tracking-tight">
                      {isLogin ? 'Welcome back.' : 'Deploy Identity.'}
                   </h3>
-               </div>
-
-               <button 
-                  onClick={handleGoogleLogin}
-                  disabled={isLoading || isGoogleLoading}
-                  className="w-full flex items-center justify-center gap-3 py-3 rounded-xl bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-bold text-[11px] uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm active:scale-[0.98] mb-6 disabled:opacity-50"
-               >
-                  {isGoogleLoading ? (
-                     <Loader2 size={16} className="animate-spin text-brand-500" />
-                  ) : (
-                     <GoogleIcon />
-                  )}
-                  <span>Continue with Google</span>
-               </button>
-
-               <div className="relative flex items-center justify-center mb-6">
-                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100 dark:border-white/5"></div></div>
-                  <span className="relative z-10 px-4 bg-white dark:bg-[#0a0a0a] text-[8px] font-black text-slate-400 uppercase tracking-[0.3em]">Or use Credentials</span>
                </div>
 
                <form onSubmit={handleSubmit} className="space-y-4">
@@ -234,7 +194,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                               onChange={(e) => setName(e.target.value)}
                               className="w-full h-12 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl pl-11 pr-4 text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all placeholder:text-slate-400 placeholder:font-medium"
                               placeholder="Legal Name"
-                              disabled={isLoading || isGoogleLoading}
+                              disabled={isLoading}
                               autoComplete="name"
                            />
                         </div>
@@ -252,7 +212,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                            className="w-full h-12 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl pl-11 pr-4 text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all placeholder:text-slate-400 placeholder:font-medium"
                            placeholder="name@node.com"
                            required
-                           disabled={isLoading || isGoogleLoading}
+                           disabled={isLoading}
                            autoComplete="email"
                         />
                      </div>
@@ -271,14 +231,14 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                            className="w-full h-12 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl pl-11 pr-11 text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all placeholder:text-slate-400 placeholder:font-medium"
                            placeholder="••••••••"
                            required
-                           disabled={isLoading || isGoogleLoading}
+                           disabled={isLoading}
                            autoComplete={isLogin ? "current-password" : "new-password"}
                         />
                         <button 
                            type="button" 
                            onClick={() => setShowPassword(!showPassword)}
                            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
-                           disabled={isLoading || isGoogleLoading}
+                           disabled={isLoading}
                         >
                            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                         </button>
@@ -293,7 +253,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                   )}
 
                   <button 
-                     disabled={isLoading || isGoogleLoading}
+                     disabled={isLoading}
                      className="w-full h-12 rounded-xl bg-gradient-to-r from-slate-900 to-slate-800 dark:from-white dark:to-slate-200 text-white dark:text-black font-display font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:shadow-brand-500/10 hover:scale-[1.01] active:scale-[0.99] transition-all duration-300 flex items-center justify-center gap-2.5 disabled:opacity-80 disabled:cursor-wait group relative overflow-hidden mt-4"
                   >
                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
