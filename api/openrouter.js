@@ -10,6 +10,7 @@ export default async function handler(req, res) {
   }
 
   const apiKey = process.env.OPENROUTER_API_KEY;
+  const fallbackApiKey = process.env.OPENROUTER_API_KEY_FALLBACK;
   if (!apiKey) {
     return res.status(500).json({ error: 'OPENROUTER_API_KEY is not configured on server.' });
   }
@@ -47,11 +48,11 @@ export default async function handler(req, res) {
       });
     }
 
-    const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const callOpenRouter = (key) => fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       signal: AbortSignal.timeout(60000),
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${key}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': req.headers?.origin || req.headers?.referer || 'https://personal-ca.local',
         'X-OpenRouter-Title': 'Personal CA',
@@ -59,9 +60,20 @@ export default async function handler(req, res) {
       body: JSON.stringify(parsedBody),
     });
 
+    let upstream = await callOpenRouter(apiKey);
+
+    // If primary key is rate-limited, retry once with fallback key (if configured).
+    if (upstream.status === 429 && fallbackApiKey) {
+      upstream = await callOpenRouter(fallbackApiKey);
+    }
+
     const text = await upstream.text();
     res.status(upstream.status);
     res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json');
+    if (upstream.status === 429) {
+      res.setHeader('Retry-After', upstream.headers.get('retry-after') || '8');
+      return res.send(text || JSON.stringify({ error: 'OpenRouter rate limit exceeded. Please retry shortly.' }));
+    }
     return res.send(text);
   } catch (error) {
     if (error instanceof SyntaxError) {
