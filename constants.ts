@@ -209,5 +209,4 @@ export const DEFAULT_MODELS: Record<AIProvider, string> = {
   openai: 'nvidia/nemotron-3-super-120b-a12b:free',
   anthropic: 'nvidia/nemotron-3-super-120b-a12b:free',
   openrouter: 'nvidia/nemotron-3-super-120b-a12b:free',
-  puter: 'nvidia/nemotron-3-super-120b-a12b:free',
 };
