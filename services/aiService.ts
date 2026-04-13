@@ -512,13 +512,7 @@ export const sendMessageToAI = async (
           return { text: finalResultText, sources: [] };
       } catch (error: any) {
           console.error("OpenRouter Error:", error);
-          const gracefulFallback = "I’m temporarily unable to reach OpenRouter. Please retry in a moment. If this persists, configure OPENROUTER_API_KEY on the server (or VITE_OPENROUTER_API_KEY for local dev).";
-          if (saveHistory) {
-            chatHistory.push(currentContent);
-            chatHistory.push({ role: 'model', parts: [{ text: gracefulFallback }] });
-          }
-          if (onStream) onStream(gracefulFallback, []);
-          return { text: gracefulFallback, sources: [] };
+          throw error;
       }
   } else if (enforcedProvider === 'anthropic') {
       if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_NODE_OFFLINE");
