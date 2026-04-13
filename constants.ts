@@ -200,7 +200,7 @@ export const GUIDED_PATHS = [
 export const AI_MODELS: AIModelConfig[] = [
   { id: 'nvidia/nemotron-3-super-120b-a12b:free', name: 'Nemotron 3 Super 120B (Free)', provider: 'openrouter', description: 'NVIDIA reasoning model via OpenRouter' },
   { id: 'openai/gpt-oss-120b:free', name: 'GPT OSS 120B (Free)', provider: 'openrouter', description: 'OpenAI open-weight model via OpenRouter' },
-  { id: 'google/gemma-3-27b-it:free', name: 'Gemma 3 27B IT (Free)', provider: 'openrouter', description: 'Google instruction model via OpenRouter' },
+  { id: 'google/gemma-4-31b-it:free', name: 'Gemma 4 31B IT (Free)', provider: 'openrouter', description: 'Google instruction model via OpenRouter' },
   { id: 'qwen/qwen3-next-80b-a3b-instruct:free', name: 'Qwen3 Next 80B A3B (Free)', provider: 'openrouter', description: 'Qwen instruct model via OpenRouter' },
 ];
 
