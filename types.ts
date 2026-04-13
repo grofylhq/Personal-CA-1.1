@@ -96,6 +96,7 @@ export interface UserAccount {
   id: string;
   email: string;
   passwordHash: string;
+  passwordSalt?: string;
   name: string;
   profile: UserProfile;
 }

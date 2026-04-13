@@ -244,12 +244,16 @@ const supabaseUser = {
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function hashPassword(password: string): Promise<string> {
-  // NOTE: This localStorage fallback uses a simple deterministic salt.
-  // In production, Supabase Auth handles password hashing with bcrypt.
-  // This is only used when SUPABASE_URL/SUPABASE_ANON_KEY are not configured.
-  const salt = 'pca_local_demo_salt_v2';
-  const salted = password + salt;
+function generateSalt(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function hashPassword(password: string, salt: string): Promise<string> {
+  // NOTE: localStorage auth is fallback-only.
+  // We still use a unique per-user salt to avoid deterministic hashes.
+  const salted = `${password}:${salt}`;
   const msgBuffer = new TextEncoder().encode(salted);
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
@@ -261,12 +265,15 @@ const localAuth = {
     await delay(600);
     const usersRaw = localStorage.getItem(DB_KEY_USERS);
     const users: UserAccount[] = usersRaw ? JSON.parse(usersRaw) : [];
-    const hashedPassword = await hashPassword(password);
+    const cleanEmail = email.toLowerCase().trim();
 
-    const user = users.find(
-      u => u.email.toLowerCase() === email.toLowerCase().trim() && u.passwordHash === hashedPassword
-    );
+    const user = users.find(u => u.email.toLowerCase() === cleanEmail);
     if (!user) throw new Error('Invalid Credentials / Identity Node Mismatch');
+    const salt = user.passwordSalt || 'pca_local_demo_salt_v2';
+    const hashedPassword = await hashPassword(password, salt);
+    if (user.passwordHash !== hashedPassword) {
+      throw new Error('Invalid Credentials / Identity Node Mismatch');
+    }
 
     const hydratedUser = deepHydrate(user);
     hydratedUser.profile = enforceAIProfileDefaults(hydratedUser.profile);
@@ -284,13 +291,15 @@ const localAuth = {
       throw new Error('Identity already exists in this node');
     }
 
-    const hashedPassword = await hashPassword(password);
+    const salt = generateSalt();
+    const hashedPassword = await hashPassword(password, salt);
     const newProfile = createDefaultProfile(crypto.randomUUID(), cleanEmail, name.trim());
 
     const newAccount: UserAccount = {
       id: newProfile.id,
       email: cleanEmail,
       passwordHash: hashedPassword,
+      passwordSalt: salt,
       name: name.trim(),
       profile: newProfile,
     };

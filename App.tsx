@@ -4,7 +4,7 @@ import { Content } from "@google/genai";
 import { Message, UserProfile, AppView, ChatSession, UserAccount, SubscriptionTier, DraftDocument } from './types';
 import { sendMessageToAI, transcribeAudio, resetChatSession, clearChatSession, initializeAI } from './services/aiService';
 import { authAPI, userAPI } from './services/database';
-import { supabase } from './utils/supabase';
+import { getSupabaseClient } from './services/supabaseClient';
 import ToolsPanel from './components/ToolsPanel';
 import NewsPanel from './components/NewsPanel';
 import ProfilePanel from './components/ProfilePanel';
@@ -221,7 +221,12 @@ const App: React.FC = () => {
     let isMounted = true;
 
     async function getTodos() {
-      const { data, error } = await supabase.from('todos').select('id,name');
+      const sb = getSupabaseClient();
+      if (!sb) {
+        // Gracefully skip optional todos integration when Supabase is not configured.
+        return;
+      }
+      const { data, error } = await sb.from('todos').select('id,name');
       if (error) {
         console.error('Failed to fetch todos:', error.message);
         return;
