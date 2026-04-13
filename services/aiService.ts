@@ -7,6 +7,22 @@ import { UserProfile, NewsItem, AIProvider } from '../types';
 
 const getDefaultProvider = (preferred?: AIProvider): AIProvider => preferred || 'openrouter';
 
+const hasProviderCredentials = (provider: AIProvider): boolean => {
+  if (provider === 'openrouter') {
+    return Boolean(process.env.OPENROUTER_API_KEY || import.meta.env.VITE_OPENROUTER_API_KEY);
+  }
+  if (provider === 'gemini') return Boolean(process.env.GEMINI_API_KEY);
+  if (provider === 'openai') return Boolean(process.env.OPENAI_API_KEY);
+  if (provider === 'anthropic') return Boolean(process.env.ANTHROPIC_API_KEY);
+  return false;
+};
+
+const resolveProvider = (preferred?: AIProvider): AIProvider => {
+  const selected = getDefaultProvider(preferred);
+  if (selected === 'openrouter') return selected;
+  return hasProviderCredentials(selected) ? selected : 'openrouter';
+};
+
 const normalizeModelForProvider = (provider: AIProvider, model?: string): string => {
   if (!model) return DEFAULT_MODELS[provider];
   return model;
@@ -140,7 +156,7 @@ export const sendMessageToAI = async (
   }
 
   const currentContent: Content = { role: 'user', parts: currentParts };
-  const enforcedProvider: AIProvider = getDefaultProvider(provider);
+  const enforcedProvider: AIProvider = resolveProvider(provider);
   const resolvedModel = normalizeModelForProvider(enforcedProvider, model);
   
   if (enforcedProvider === 'gemini') {
