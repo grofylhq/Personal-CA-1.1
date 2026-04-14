@@ -205,8 +205,8 @@ export const AI_MODELS: AIModelConfig[] = [
 ];
 
 export const DEFAULT_MODELS: Record<AIProvider, string> = {
-  gemini: 'nvidia/nemotron-3-super-120b-a12b:free',
-  openai: 'nvidia/nemotron-3-super-120b-a12b:free',
-  anthropic: 'nvidia/nemotron-3-super-120b-a12b:free',
+  gemini: 'gemini-2.5-flash',
+  openai: 'gpt-4.1-mini',
+  anthropic: 'claude-3-5-sonnet-latest',
   openrouter: 'nvidia/nemotron-3-super-120b-a12b:free',
 };

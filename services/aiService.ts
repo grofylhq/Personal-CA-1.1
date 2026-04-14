@@ -2,13 +2,33 @@ import { GoogleGenAI, FunctionDeclaration, Type, GenerateContentResponse, Conten
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { TOOLS } from '../constants';
-import { DEFAULT_MODELS } from '../constants';
+import { DEFAULT_MODELS, AI_MODELS } from '../constants';
 import { UserProfile, NewsItem, AIProvider } from '../types';
 
-const getDefaultProvider = (): AIProvider => 'openrouter';
+const getDefaultProvider = (preferred?: AIProvider): AIProvider => preferred || 'openrouter';
+
+const hasProviderCredentials = (provider: AIProvider): boolean => {
+  if (provider === 'openrouter') {
+    return Boolean(process.env.OPENROUTER_API_KEY || import.meta.env.VITE_OPENROUTER_API_KEY);
+  }
+  if (provider === 'gemini') return Boolean(process.env.GEMINI_API_KEY);
+  if (provider === 'openai') return Boolean(process.env.OPENAI_API_KEY);
+  if (provider === 'anthropic') return Boolean(process.env.ANTHROPIC_API_KEY);
+  return false;
+};
+
+const resolveProvider = (preferred?: AIProvider): AIProvider => {
+  const selected = getDefaultProvider(preferred);
+  if (selected === 'openrouter') return selected;
+  return hasProviderCredentials(selected) ? selected : 'openrouter';
+};
 
 const normalizeModelForProvider = (provider: AIProvider, model?: string): string => {
   if (!model) return DEFAULT_MODELS[provider];
+  const providerModels = AI_MODELS.filter(m => m.provider === provider).map(m => m.id);
+  if (providerModels.length > 0 && !providerModels.includes(model)) {
+    return DEFAULT_MODELS[provider];
+  }
   return model;
 };
 
@@ -140,7 +160,7 @@ export const sendMessageToAI = async (
   }
 
   const currentContent: Content = { role: 'user', parts: currentParts };
-  const enforcedProvider: AIProvider = getDefaultProvider();
+  const enforcedProvider: AIProvider = resolveProvider(provider);
   const resolvedModel = normalizeModelForProvider(enforcedProvider, model);
   
   if (enforcedProvider === 'gemini') {
@@ -465,7 +485,12 @@ export const sendMessageToAI = async (
 
           if (!apiResult || !apiResult.ok) {
             const status = apiResult?.status ?? 500;
-            const errDetail = apiResult?.parsed?.error?.message || apiResult?.parsed?.error || apiResult?.responseText || `HTTP_${status}`;
+            const errDetail =
+              apiResult?.parsed?.error?.message ||
+              apiResult?.parsed?.detail ||
+              apiResult?.parsed?.error ||
+              apiResult?.responseText ||
+              `HTTP_${status}`;
             throw new Error(`OPENROUTER_PROXY_ERROR_${status}: ${errDetail}`);
           }
 
